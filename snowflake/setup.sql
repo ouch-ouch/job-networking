@@ -4,7 +4,7 @@
 --
 -- At the end you hand C (backend) three things:
 --   SNOWFLAKE_ACCOUNT_URL  https://<org>-<account>.snowflakecomputing.com   (Snowsight: bottom-left account menu → "Connect a tool")
---   SNOWFLAKE_PAT          the token_secret printed by step 6 (shown ONCE)
+--   SNOWFLAKE_PAT          the token_secret printed by step 7, the last result (shown ONCE)
 --   names: role COFFEE_CHAT_ROLE, warehouse COFFEE_CHAT_WH, database COFFEE_CHAT, schema APP
 
 USE ROLE ACCOUNTADMIN;
@@ -20,9 +20,10 @@ CREATE WAREHOUSE IF NOT EXISTS COFFEE_CHAT_WH
   WAREHOUSE_SIZE = 'XSMALL' AUTO_SUSPEND = 60 AUTO_RESUME = TRUE INITIALLY_SUSPENDED = TRUE;
 GRANT USAGE, OPERATE ON WAREHOUSE COFFEE_CHAT_WH TO ROLE COFFEE_CHAT_ROLE;
 
--- Let you (whoever runs this) use the role in worksheets too.
-SET me = CURRENT_USER();
-GRANT ROLE COFFEE_CHAT_ROLE TO USER IDENTIFIER($me);
+-- Let you (whoever runs this) use the role in worksheets too. Granting it under
+-- SYSADMIN means ACCOUNTADMIN inherits it, without naming your user (school/SSO
+-- accounts often have a login name that differs from the user name).
+GRANT ROLE COFFEE_CHAT_ROLE TO ROLE SYSADMIN;
 
 -- 3. Database + tables. One table per type in SPEC §5, each with user_id.
 --    Column names are the snake_case of the TS fields, except where a name is
@@ -167,15 +168,8 @@ ALTER USER COFFEE_CHAT_SVC SET AUTHENTICATION POLICY COFFEE_CHAT.APP.PAT_ANY_NET
 -- CREATE NETWORK POLICY IF NOT EXISTS COFFEE_CHAT_ALLOW_ALL ALLOWED_IP_LIST = ('0.0.0.0/0');
 -- ALTER USER COFFEE_CHAT_SVC SET NETWORK_POLICY = COFFEE_CHAT_ALLOW_ALL;
 
--- 6. The token. The result row's token_secret is shown ONCE: copy it straight
---    into Vercel env vars (or a 1Password/Bitwarden note). Never commit it or paste it in chat.
-ALTER USER COFFEE_CHAT_SVC ADD PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_BACKEND
-  ROLE_RESTRICTION = 'COFFEE_CHAT_ROLE'
-  DAYS_TO_EXPIRY = 7
-  COMMENT = 'Shipyard hackathon backend';
--- Lost it? ALTER USER COFFEE_CHAT_SVC REMOVE PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_BACKEND; then re-run step 6.
-
--- 7. Smoke tests, run as the app role so they prove the grants work.
+-- 6. Smoke tests, run as the app role so they prove the grants work.
+--    If any of these fails, "Run All" stops here with the error and no token is made yet.
 USE ROLE COFFEE_CHAT_ROLE;
 USE WAREHOUSE COFFEE_CHAT_WH;
 USE SCHEMA COFFEE_CHAT.APP;
@@ -197,4 +191,13 @@ SELECT AI_CLASSIFY(
 
 SELECT AI_SENTIMENT('Happy to chat! Grab any slot on my calendar this week.') AS warmth;
 
-SHOW TABLES IN SCHEMA COFFEE_CHAT.APP;
+-- 7. The token. Kept LAST on purpose: Snowsight's "Run All" only shows the final
+--    statement's result, so this is the row you'll see. Its token_secret is shown ONCE:
+--    copy it straight into Vercel env vars or a password manager. Never commit it or paste it in chat.
+USE ROLE ACCOUNTADMIN;
+ALTER USER COFFEE_CHAT_SVC ADD PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_BACKEND
+  ROLE_RESTRICTION = 'COFFEE_CHAT_ROLE'
+  DAYS_TO_EXPIRY = 7
+  COMMENT = 'Shipyard hackathon backend';
+-- Lost it, or need to re-run the whole file? First run:
+--   ALTER USER COFFEE_CHAT_SVC REMOVE PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_BACKEND;

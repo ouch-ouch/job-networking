@@ -56,15 +56,19 @@ Mock state is saved to localStorage. Setup → "Reset mock data" restores it.
 ## Still on you (needs your accounts, so I couldn't click through these)
 
 ### 1. Snowflake (hand-off to C due at 0:25)
-1. Make a trial account (or use the hackathon one) and open a SQL worksheet as ACCOUNTADMIN.
-2. Paste in `snowflake/setup.sql` and run all of it.
-3. Step 6 prints `token_secret` **once**. Put it straight into Vercel env vars, or send it to C in a password manager. Don't paste it in Slack or commit it.
-4. Send C:
-   - `SNOWFLAKE_ACCOUNT_URL`
+No install needed: Snowflake runs in the browser, and you only paste and click Run.
+1. Ask the organizers whether there's a hackathon Snowflake account. If not, sign up at signup.snowflake.com (Enterprise edition, AWS, a US region) and verify your email. The trial user is ACCOUNTADMIN automatically.
+2. Log in → **+ Create** (top left) → **SQL Worksheet**.
+3. Open `snowflake/setup.sql` in VS Code → Ctrl+A, Ctrl+C → paste it into the worksheet.
+4. Next to the blue ▶ Run button, open the dropdown → **Run All** (Ctrl+Shift+Enter). It takes about a minute.
+5. If it stops on a red error, copy the error text and ask Claude. Nothing secret has been made yet at that point.
+6. The last result is one row with `token_secret`, shown **once**. Put it straight into Vercel env vars, or send it to C in a password manager. Don't paste it in Slack or commit it.
+7. Send C:
+   - `SNOWFLAKE_ACCOUNT_URL` (bottom-left account menu → your account → copy the account URL)
    - `SNOWFLAKE_PAT`
    - the names `COFFEE_CHAT_ROLE` / `COFFEE_CHAT_WH` / `COFFEE_CHAT.APP`
-5. If `AI_COMPLETE('grok-4.7', ...)` fails, tell C to switch to `claude-sonnet-4-6` (§6b fallback).
-6. If step 5 (authentication policy) errors, use the commented-out network-policy fallback right below it.
+- If `AI_COMPLETE('grok-4.7', ...)` fails, tell C to switch to `claude-sonnet-4-6` (§6b fallback).
+- If the script's step 5 (authentication policy) errors, use the commented-out network-policy fallback right below it.
 
 C's first REST smoke test:
 ```bash
