@@ -102,6 +102,9 @@ export const inputs = {
     profile,
     targets: z.array(target).max(50),
     existingBank: z.array(question).max(500),
+    // People in the user's network; suggestions are grounded in them.
+    contacts: z.array(contact).max(50).default([]),
+    focusContactId: short.optional(),
   }),
   "prep-brief": z.object({
     contact,
@@ -171,7 +174,14 @@ export const outputs = {
   }),
   "suggest-questions": z.object({
     questions: z
-      .array(z.object({ text: short.min(1), category: z.enum(categories) }))
+      .array(
+        z.object({
+          text: short.min(1),
+          category: z.enum(categories),
+          contactId: short.nullable().optional(),
+          why: short.optional(),
+        }),
+      )
       .min(1)
       .max(10),
   }),
@@ -206,6 +216,12 @@ const obj = (properties: Record<string, JsonSchema>): JsonSchema => ({
 const suggestedQuestion = obj({
   text: str,
   category: { type: "string", enum: [...categories] },
+});
+const networkQuestion = obj({
+  text: str,
+  category: { type: "string", enum: [...categories] },
+  contactId: { anyOf: [str, { type: "null" }] },
+  why: str,
 });
 export function outputSchema(endpoint: Endpoint, input: unknown): JsonSchema {
   switch (endpoint) {
@@ -277,7 +293,7 @@ export function outputSchema(endpoint: Endpoint, input: unknown): JsonSchema {
         },
       });
     case "suggest-questions":
-      return obj({ questions: array(suggestedQuestion) });
+      return obj({ questions: array(networkQuestion) });
     case "prep-brief":
       return obj({
         summary: str,
@@ -475,18 +491,26 @@ export function normalizeOutput(
       );
   }
   if (endpoint === "suggest-questions") {
+    const data = inputs[endpoint].parse(input);
     const existing = new Set(
-      inputs[endpoint]
-        .parse(input)
-        .existingBank.map((q) => q.text.trim().toLowerCase()),
+      data.existingBank.map((q) => q.text.trim().toLowerCase()),
+    );
+    // A question may only be tagged with a person who was actually supplied.
+    const contactIds = new Set(
+      data.contacts.map((c) => c.id).filter((id): id is string => !!id),
     );
     const result = parsed as z.infer<(typeof outputs)["suggest-questions"]>;
-    result.questions = result.questions.filter((q) => {
-      const key = q.text.trim().toLowerCase();
-      if (existing.has(key)) return false;
-      existing.add(key);
-      return true;
-    });
+    result.questions = result.questions
+      .map((q) => ({
+        ...q,
+        contactId: q.contactId && contactIds.has(q.contactId) ? q.contactId : null,
+      }))
+      .filter((q) => {
+        const key = q.text.trim().toLowerCase();
+        if (existing.has(key)) return false;
+        existing.add(key);
+        return true;
+      });
     if (!result.questions.length)
       throw new ContractError(
         "All suggestions duplicate your bank. Try again with more context.",

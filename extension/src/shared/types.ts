@@ -119,6 +119,8 @@ export type Question = {
   status: "suggested" | "approved" | "skipped";
   timesUsed: number;
   landedWell?: number;
+  contactId?: string; // the person in your network this question was tailored for
+  why?: string; // which fact about them makes it fit
 };
 export type Settings = {
   demoMode: boolean;
@@ -196,7 +198,7 @@ export type Action =
   | { type: "POLL_REPLIES" }
   | { type: "RECORD_REPLY"; contactId: string; replyText: string }
   | { type: "CREATE_MEETING"; contactId: string; start: string; end: string }
-  | { type: "SUGGEST_QUESTIONS" }
+  | { type: "SUGGEST_QUESTIONS"; contactId?: string }
   | { type: "UPDATE_QUESTION"; question: Question }
   | { type: "GENERATE_PREP_BRIEF"; contactId: string }
   | {
