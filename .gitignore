@@ -23,3 +23,6 @@ build/
 
 # Logs
 *.log
+
+# Local account setup diagnostics
+docs/screenshots/google-test-user-setup.png
