@@ -398,6 +398,22 @@ Each one replaces a hand-written prompt with a Snowflake-native feature, which i
 
 **Fallback:** if Grok isn't available on the account, switch the model string to `claude-sonnet-4-6` on the same Cortex endpoint. Nothing else changes.
 
+> **⚠️ Blocker found 2026-10-24: the current Snowflake account is a trial, and trials can't use any Cortex AI.** Setup (`snowflake/setup.sql`) and the token work, but every AI call fails:
+>
+> | Check | Result |
+> |---|---|
+> | Token + SQL API connection (8 tables visible) | ✅ works |
+> | Cortex REST `/v1/chat/completions`, `grok-4.7` | ❌ 403 "This account is not allowed to access this endpoint" |
+> | Same endpoint, `claude-sonnet-4-6` fallback | ❌ same 403, so the fallback above does not help |
+> | `AI_COMPLETE('grok-4.7', ...)` | ❌ "not available for trial accounts" |
+> | `AI_EXTRACT`, `AI_CLASSIFY`, `AI_SENTIMENT`, `AI_SIMILARITY` / `AI_EMBED` | ❌ "not available for trial accounts" |
+>
+> This blocks the never-cut items (Grok agent loop, `AI_EXTRACT`, `AI_CLASSIFY`). Next steps:
+> 1. Ask the organizers for a hackathon Snowflake account or credits (the real fix). On a new account, re-run `setup.sql`, update `.env` / Vercel env vars, and re-run the check.
+> 2. C needs to know now; the whole backend depends on this.
+> 3. Converting the trial to a paid account may unlock Cortex. Unconfirmed: check before paying.
+> 4. Backup plan: call Grok directly through the xAI API (needs an xAI key) and replace the SQL AI functions with prompts. This is the same xAI adapter the X channel uses (§8.4).
+
 ### 8.4 [X] Grok research integration (xAI API + X Search)
 
 Use a backend adapter to the **xAI API with X Search** as the default research engine. Its documented search tools include keyword, semantic, user, and thread search [S2]. Configure the model server-side; validate a tool-compatible model during setup rather than embedding a model name throughout the application.
@@ -908,6 +924,7 @@ Use focused unit tests for ranking, reference validation, state transitions, ded
 - Branding/name: "Coffee Chat Copilot" is a placeholder; the X spec uses "networkMAX".
 - Which team split (§15 Option 1 or 2)? Under Option 1, which master's student takes which of roles B, C, and D?
 - Which test LinkedIn account and test inboxes will we use for the live demo?
+- **Blocker:** where do we get a Snowflake account that can run Cortex AI? The current trial can't (§8.3).
 - Every row in §0.
 
 **Inputs needed at implementation** (onboarding inputs, not reasons to delay the specification):
