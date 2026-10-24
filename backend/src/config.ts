@@ -21,6 +21,13 @@ const Env = z
     JOB_TIMEOUT_MS: z.coerce.number().int().positive().default(150_000),
     JOB_TTL_MS: z.coerce.number().int().positive().default(2 * 60 * 60 * 1000),
     X_REPLY_LIMIT: z.coerce.number().int().positive().default(280),
+    // Coffee-chat /ai/* routes (templates, questions, prep briefs). They reuse XAI_API_KEY.
+    XAI_DRAFT_MODEL: z.string().min(1).optional(),
+    XAI_CLASSIFY_MODEL: z.string().min(1).optional(),
+    ALLOWED_EXTENSION_IDS: z
+      .string()
+      .default('')
+      .transform((s) => s.split(',').map((o) => o.trim()).filter(Boolean)),
   })
   .refine((e) => e.PROVIDER_MODE === 'fixture' || !!e.XAI_API_KEY, {
     message: 'XAI_API_KEY is required when PROVIDER_MODE=live',
