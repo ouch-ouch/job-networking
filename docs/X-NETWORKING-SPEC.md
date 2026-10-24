@@ -344,6 +344,17 @@ Secondary: useful recommendations saved, draft-to-user-marked-sent conversion, r
 4. **Coffee-chat loop:** invitation drafts, timezone-aware confirmed logistics, preparation, notes, reminders, opportunity outcomes. Done when the complete relationship loop can be recorded and corrected.
 5. **Pilot:** test with the user's supplied resume and targets, check Brave compatibility, measure recommendation usefulness and daily friction, fix issues, then prepare extension packaging and disclosures.
 
+### Four-person feature ownership
+
+| Person | Primary responsibility |
+| --- | --- |
+| Julia | Job-portal recognition, posting extraction, navigation changes, capture fallback |
+| Sushant | Extension core, shared contracts, state, routing, end-to-end integration |
+| Rachel | Side-panel UI, resume/profile review, draft review, relationship and coffee-chat screens |
+| Maryam | Grok backend, X person discovery, public conversational research, individual writing |
+
+See [the four-person build plan](TEAM-PLAN.md) for feature checklists, handoffs, demo scope, acceptance checks, and a proposed three-hour schedule. The personal X/Grok spec takes precedence over the separate hackathon proposal’s template/LinkedIn workflow.
+
 ## 16. Acceptance criteria and verification
 
 - Opening a supported job posting and invoking the extension identifies the employer and role with evidence, handles ATS/employer distinction, and offers corrections. Portal landing pages never cause an invented job match.
