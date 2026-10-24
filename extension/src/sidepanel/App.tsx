@@ -65,6 +65,7 @@ import {
   buildWebSearchUrl,
 } from "../content/sourcing";
 import { grabJobPage } from "../content";
+import { discoverPeopleOnX } from "../shared/xDiscovery";
 
 const DialogErrorContext = createContext<string | null>(null);
 
@@ -1243,6 +1244,9 @@ function PeopleSearchDialog({
     target ? buildLinkedInSearchQuery(target, state.profile) : "",
   );
   const [plan, setPlan] = useState<PeopleSearchPlan | null>(null);
+  const [xBusy, setXBusy] = useState(false);
+  const [xError, setXError] = useState<string | null>(null);
+  const [xFound, setXFound] = useState(0);
   const searchUrl =
     target && keywords.trim()
       ? buildLinkedInSearchUrl(target, state.profile, { keywords })
@@ -1289,6 +1293,37 @@ function PeopleSearchDialog({
           {busy ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}
           {busy ? "Creating searches…" : plan ? "Regenerate smart searches" : "Create smart searches"}
         </button>
+        <button
+          className="button primary full"
+          disabled={xBusy || !target}
+          onClick={async () => {
+            if (!target) return;
+            setXBusy(true);
+            setXError(null);
+            try {
+              const existingHandles = state.contacts
+                .filter((c) => c.targetId === target.id && c.linkedinUrl?.includes("x.com/"))
+                .map((c) => c.linkedinUrl!.split("x.com/")[1]?.split(/[/?]/)[0])
+                .filter((h): h is string => Boolean(h));
+              const found = await discoverPeopleOnX(target, state.profile, existingHandles);
+              for (const person of found) {
+                await run({ type: "ADD_CONTACT", contact: { ...person, targetId: target.id } });
+              }
+              setXFound(found.length);
+            } catch (e) {
+              setXError(e instanceof Error ? e.message : String(e));
+            } finally {
+              setXBusy(false);
+            }
+          }}
+        >
+          {xBusy ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}
+          {xBusy ? "Searching X live (can take ~30-150s)…" : "Find people on X (live Grok search)"}
+        </button>
+        {xError && <p className="field-help" role="alert">{xError}</p>}
+        {!xError && xFound > 0 && !xBusy && (
+          <p className="field-help">Added {xFound} evidence-backed {xFound === 1 ? "person" : "people"} found live on X.</p>
+        )}
         {!state.profile.school.trim() && !state.profile.background.trim() && (
           <p className="field-help">
             Add your school and experience in Settings for more personal search
