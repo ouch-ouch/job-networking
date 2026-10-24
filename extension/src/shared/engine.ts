@@ -13,7 +13,8 @@ import type {
 } from "./types";
 import { getState, saveState, switchMode } from "./storage";
 import { createDemoState, demoXContacts } from "./mock";
-import { aiRequest, demoResponse } from "./ai";
+import { aiRequest } from "./ai";
+import { extractJobBasics } from "./jobText";
 import { connectGoogle } from "../google/auth";
 import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
@@ -579,9 +580,7 @@ export async function applyAction(
       } catch (error) {
         if (state.settings.demoMode) throw error;
         aiUnavailable = error instanceof Error ? error.message : "AI unavailable";
-        parsed = demoResponse("parse-job", {
-          rawDescription: action.rawDescription,
-        }) as Omit<Target, "id" | "rawDescription">;
+        parsed = extractJobBasics(action.rawDescription, action.url);
       }
       const missing = (value?: string) =>
         !value?.trim() || value.trim() === "Not specified";

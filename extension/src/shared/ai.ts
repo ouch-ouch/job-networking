@@ -7,6 +7,7 @@ import type {
   Target,
   Template,
 } from "./types";
+import { extractJobBasics } from "./jobText";
 
 type DemoInput = {
   template?: Template;
@@ -119,41 +120,8 @@ export function demoResponse(endpoint: string, payload: unknown): unknown {
   const data = payload as DemoInput;
   const name = data.contact?.name.split(/\s+/)[0] || "there";
   switch (endpoint.replace(/^\/?ai\//, "")) {
-    case "parse-job": {
-      const raw = data.rawDescription || "";
-      const company =
-        raw.match(/(?:company|employer)\s*:\s*([^\n,]+)/i)?.[1]?.trim() ||
-        raw.match(/\b([A-Z][\w.&-]+)\s+is hiring\b/)?.[1] ||
-        raw.match(/\bat ([A-Z][\w.&-]+)/)?.[1] ||
-        "Not specified";
-      const role =
-        raw.match(/(?:role|job title|position)\s*:\s*([^\n]+)/i)?.[1]?.trim() ||
-        raw.match(
-          /\b(?:Senior |Junior |Staff )?(?:Software Engineer|Product Manager|Data Scientist|Data Analyst|Business Analyst|Designer|Researcher)(?:, New Grad)?\b/i,
-        )?.[0] ||
-        "Not specified";
-      return {
-        company,
-        role,
-        team:
-          raw.match(
-            /\b(?:on|join|for) (?:the )?([A-Z][\w -]{1,30}) team\b/,
-          )?.[1] || "",
-        location:
-          raw.match(/(?:location)\s*:\s*([^\n]+)/i)?.[1]?.trim() ||
-          (raw.includes("New York") ? "New York, NY" : ""),
-        skills: [
-          "TypeScript",
-          "JavaScript",
-          "Python",
-          "SQL",
-          "React",
-          "APIs",
-          "distributed systems",
-          "Figma",
-        ].filter((skill) => raw.toLowerCase().includes(skill.toLowerCase())),
-      };
-    }
+    case "parse-job":
+      return extractJobBasics(data.rawDescription || "");
     case "people-search-plan": {
       const profile = data.profile;
       const target = data.target;
