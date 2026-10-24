@@ -23,6 +23,7 @@ import {
   Coffee,
   AtSign,
   Copy,
+  Presentation,
   ExternalLink,
   FileText,
   Inbox,
@@ -52,6 +53,7 @@ import type {
   Contact,
   Draft,
   Meeting,
+  DemoSceneId,
   PeopleSearchPlan,
   Profile,
   Question,
@@ -60,6 +62,7 @@ import type {
   Target,
 } from "../shared/types";
 import { useStore } from "../shared/useStore";
+import { DEMO_SCENES, SAMPLE_JOB_POSTING } from "../shared/demoScenes";
 import { TemplateEditor, TemplatePreview } from "./TemplateEditor";
 import {
   buildLinkedInSearchQuery,
@@ -263,6 +266,41 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [queueTab, setQueueTab] = useState("pending");
+  const [presenter, setPresenter] = useState(false);
+  /** Load a presentation scene and jump to the screen it's about. */
+  async function loadScene(scene: DemoSceneId) {
+    const result = await run({ type: "LOAD_DEMO_SCENE", scene });
+    if (!result) return;
+    setModal(null);
+    setSelected(null);
+    setTargetId("all");
+    setFilter("all");
+    setSearch("");
+    if (scene === "reply") {
+      setQueueTab("pending");
+      setPage("approvals");
+    } else if (scene === "chat") {
+      const meeting = result.state.meetings.find((m) => m.contactId === "demo_maya");
+      if (meeting) openChat(meeting.id);
+      else setPage("chats");
+    } else if (scene === "after") {
+      setPage("network");
+      setSelected("demo_maya");
+    } else setPage("network");
+  }
+  // Alt+1..5 jump to a scene, Alt+0 shows or hides the presenter panel (demo mode only).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!state?.settings.demoMode || !e.altKey) return;
+      const digit = /^Digit(\d)$/.exec(e.code)?.[1];
+      if (digit === undefined) return;
+      e.preventDefault();
+      if (digit === "0") setPresenter((v) => !v);
+      else if (DEMO_SCENES[Number(digit) - 1]) void loadScene(DEMO_SCENES[Number(digit) - 1].id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   useEffect(() => {
     if (toast) {
       const timeout = setTimeout(() => setToast(""), 4500);
@@ -507,6 +545,9 @@ export default function App() {
                 Demo mode · Fictional contacts and simulated sends. Your changes
                 are saved locally.
               </span>
+              <button onClick={() => setPresenter((v) => !v)}>
+                {presenter ? "Hide presenter" : "Presenter"} <Presentation size={12} />
+              </button>
               <button onClick={() => setPage("settings")}>
                 Set up live integrations <ArrowUpRight size={12} />
               </button>
@@ -1163,6 +1204,52 @@ export default function App() {
             </footer>
           </main>
         </div>
+        {presenter && s.settings.demoMode && (
+          <aside className="presenter-panel" aria-label="Presenter controls">
+            <div className="presenter-top">
+              <strong>
+                <Presentation size={15} /> Presenter
+              </strong>
+              <button
+                className="icon-button"
+                aria-label="Hide presenter controls"
+                onClick={() => setPresenter(false)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <ol className="presenter-scenes">
+              {DEMO_SCENES.map((scene, i) => (
+                <li key={scene.id}>
+                  <button disabled={busy} onClick={() => void loadScene(scene.id)}>
+                    <span className="presenter-num">{i + 1}</span>
+                    <span>
+                      <strong>{scene.title}</strong>
+                      <small>{scene.shows}</small>
+                    </span>
+                    <kbd>Alt+{i + 1}</kbd>
+                  </button>
+                </li>
+              ))}
+            </ol>
+            <button
+              className="button outline compact full"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(SAMPLE_JOB_POSTING);
+                  setToast("Sample job posting copied. Paste it into Add a target.");
+                } catch {
+                  setToast("Could not copy. The posting is in docs/DEMO-SCRIPT.md.");
+                }
+              }}
+            >
+              <Copy size={14} /> Copy sample job posting
+            </button>
+            <p className="presenter-note">
+              Everyone here is fictional and nothing is really sent. Alt+0 hides this panel.
+            </p>
+          </aside>
+        )}
         {toast && (
           <div className="toast" role="status">
             <CheckCircle2 size={17} />

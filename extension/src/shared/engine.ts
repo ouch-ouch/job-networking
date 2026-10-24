@@ -12,13 +12,14 @@ import type {
   Target,
 } from "./types";
 import { getState, saveState, switchMode } from "./storage";
-import { createDemoState } from "./mock";
+import { createDemoState, demoXContacts } from "./mock";
 import { aiRequest } from "./ai";
 import { connectGoogle } from "../google/auth";
 import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
 import { scrapeSearch, fillLinkedIn } from "../content/index";
 import { discoverOnX } from "./x";
+import { buildDemoScene, DEMO_SCENES } from "./demoScenes";
 
 const DAY = 86_400_000;
 const OPT_OUT = "If you'd prefer no follow-ups, just let me know.";
@@ -88,51 +89,6 @@ function resetUsage(state: AppState, now: number): void {
   if (state.usage.date !== today(now))
     state.usage = { date: today(now), emails: 0, profiles: 0 };
 }
-/** Fictional people for demo mode's "Find people on X". No X search runs. */
-function demoXContacts(target: Target): Contact[] {
-  const people = [
-    {
-      handle: "devon_builds_demo",
-      name: "Devon Reyes",
-      title: "Software Engineer",
-      reason: `Their X bio says they're an engineer at ${target.company}. Posts about the systems behind ${target.team || target.role} and answers student questions.`,
-      post: "Hot take: the best intern projects are the boring reliability ones. You learn the whole stack.",
-      relevance: 88,
-    },
-    {
-      handle: "priya_recruits_demo",
-      name: "Priya Shah",
-      title: "University Recruiter",
-      reason: `Their X bio says they recruit for ${target.company}. Shared that ${target.company} is hiring early-career ${target.role} candidates this season.`,
-      post: "Early-career apps are open! Tip: a short note about a real project beats a perfect cover letter.",
-      relevance: 81,
-    },
-    {
-      handle: "sam_ships_demo",
-      name: "Sam Okafor",
-      title: "Software Engineer",
-      reason: `Says in their X posts they used to work at ${target.company}. Writes threads about breaking into the industry from a non-target background.`,
-      post: "Thread: 5 things I wish I knew before my first engineering internship.",
-      relevance: 70,
-    },
-  ];
-  return people.map((p) => ({
-    id: id("demo_contact"),
-    targetId: target.id,
-    name: p.name,
-    title: p.title,
-    company: target.company,
-    xHandle: p.handle,
-    xUrl: `https://x.com/${p.handle}`,
-    xPost: { url: `https://x.com/${p.handle}`, excerpt: p.post },
-    warmPaths: [],
-    relevance: p.relevance,
-    reason: p.reason,
-    stage: "found" as const,
-    followUpCount: 0,
-  }));
-}
-
 function isDemoContact(contact: Contact): boolean {
   return (
     contact.id.startsWith("demo_") ||
@@ -1446,6 +1402,15 @@ export async function applyAction(
         message = `Google connected${account.email ? ` as ${account.email}` : ""}.`;
       }
       break;
+    case "LOAD_DEMO_SCENE": {
+      if (!state.settings.demoMode)
+        throw new Error("Presentation scenes only work in Demo mode. Your live data was not touched.");
+      // Built by replaying real actions, so every scene is what the app itself would produce.
+      state = await buildDemoScene(action.scene, now, (s, a) => applyAction(s, a, services));
+      const scene = DEMO_SCENES.find((item) => item.id === action.scene);
+      message = `Scene loaded: ${scene?.title}. All people and sends are fictional.`;
+      break;
+    }
     case "RESET_DEMO":
       if (!state.settings.demoMode)
         throw new Error(

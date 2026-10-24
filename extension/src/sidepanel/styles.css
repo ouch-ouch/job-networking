@@ -4710,3 +4710,94 @@ hr {
   font-size: 12px;
   color: #33463a;
 }
+
+/* ---- Presenter controls (demo mode) ---- */
+.presenter-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  width: 330px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+  z-index: 60;
+  background: #fff;
+  border: 1px solid #d5dccf;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(31, 45, 36, 0.18);
+  padding: 14px;
+}
+.presenter-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.presenter-top strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #1f2d24;
+  font-size: 13px;
+}
+.presenter-scenes {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+.presenter-scenes button {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: none;
+  border-radius: 10px;
+  padding: 9px 8px;
+}
+.presenter-scenes button:hover:not(:disabled) {
+  background: #f4f6ef;
+  border-color: #e3e7de;
+}
+.presenter-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.presenter-scenes strong {
+  display: block;
+  color: #1f2d24;
+  font-size: 13px;
+}
+.presenter-scenes small {
+  display: block;
+  color: #4d5a50;
+  font-size: 11.5px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+.presenter-scenes kbd {
+  font-family: inherit;
+  font-size: 10px;
+  color: #4d5a50;
+  border: 1px solid #d5dccf;
+  border-radius: 5px;
+  padding: 1px 5px;
+  background: #f7f8f5;
+  white-space: nowrap;
+}
+.presenter-note {
+  margin: 10px 2px 0;
+  font-size: 11px;
+  color: #4d5a50;
+}
+.demo-strip > button + button {
+  margin-left: 14px;
+}

@@ -1070,3 +1070,46 @@ test("coffee chat questions: only bank questions can be added, and prep briefs k
   assert.match(result.message || "", /Removed from your coffee chat/);
   assert.deepEqual(result.state.meetings[0].questionIds, []);
 });
+
+test("presentation scenes build from real actions, in order, and never run in live mode", async () => {
+  const { aiRequest } = await import("../extension/src/shared/ai");
+  const { services, calls } = harness();
+  services.aiRequest = aiRequest; // the app's own demo AI: deterministic, no network
+  const base = createDemoState();
+  const load = async (scene: "start" | "people" | "reply" | "chat" | "after") =>
+    (await applyAction(base, { type: "LOAD_DEMO_SCENE", scene }, services)).state;
+
+  const start = await load("start");
+  assert.equal(start.targets.length + start.contacts.length + start.meetings.length, 0);
+  assert.ok(start.questions.some((q) => q.status === "approved"), "question bank is ready");
+  assert.ok(start.profile.name && start.template.body, "profile and template are ready");
+
+  const people = await load("people");
+  assert.equal(people.contacts.filter((c) => c.xHandle).length, 3);
+  assert.ok(people.drafts.some((d) => d.channel === "x" && d.status === "pending"), "an X draft waits for approval");
+
+  const reply = await load("reply");
+  const maya = (s: AppState) => s.contacts.find((c) => c.id === "demo_maya")!;
+  assert.equal(maya(reply).stage, "replied");
+  assert.ok(reply.drafts.some((d) => d.contactId === "demo_maya" && d.kind === "schedule_reply" && d.status === "pending"));
+
+  const chat = await load("chat");
+  assert.equal(maya(chat).stage, "scheduled");
+  const meeting = chat.meetings.find((m) => m.contactId === "demo_maya")!;
+  assert.deepEqual(meeting.questionIds.slice(0, 3), ["demo_q1", "demo_q2", "demo_q3"]);
+  assert.ok(meeting.prepBrief, "prep brief is ready");
+  assert.ok(Date.parse(meeting.start) > Date.now());
+
+  const after = await load("after");
+  const ended = after.meetings.find((m) => m.contactId === "demo_maya")!;
+  assert.ok(Date.parse(ended.end) < Date.now());
+  assert.equal(maya(after).stage, "met");
+
+  assert.equal(calls.emails + calls.linkedin + calls.calendar, 0, "no live integration was called");
+  const live = createDemoState();
+  live.settings.demoMode = false;
+  await assert.rejects(
+    applyAction(live, { type: "LOAD_DEMO_SCENE", scene: "chat" }, services),
+    /only work in Demo mode/,
+  );
+});
