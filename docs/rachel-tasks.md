@@ -1,6 +1,31 @@
 # Rachel's tasks (Role A): what's done and what's left
 
-Role A in SPEC §9 covers the side panel UI, the demo, `mock.ts`, `job-page.ts`, Snowflake setup, and Google Cloud OAuth setup.
+## Merged app (`integration` branch)
+
+One app now. Julia's UI was the base, and everything else was merged into it. The history of every branch is kept.
+
+| Came from | What's in the merged app |
+|---|---|
+| **Julia** (`julia`) | The whole UI and engine: templates with `{{keywords}}`, question bank + prep briefs, approval queue, Gmail/Calendar, LinkedIn import/fill, job-page capture, follow-ups, 69 tests |
+| **Maryam** (`main`) | The backend: Grok X Search people discovery, person research, person-specific drafts, budget limits, 26 tests |
+| **Sushant** (`sushant/personal`) | The "Find people → backend" wiring, now ported into Julia's UI as **Find people on X** |
+| **Rachel** (`rachel-ui`) | Specs, Snowflake setup, `.env` template, Google Cloud setup, the pinned extension key |
+| **New in the merge** | One backend instead of two (Julia's `/ai/*` routes moved into Maryam's server), one `npm install`, one `.env`, the X flow (find → template draft grounded in their post → approve → copy & open X → mark sent), pinned extension ID in the build, 3 new tests |
+
+**Removed as duplicates:** my original side panel (`extension/package.json`, `vite.config.ts`, `sidepanel/screens`, etc.) and Julia's Express server. Both still exist in git history and on their branches.
+
+**Checked:** typecheck clean, 72 app tests + 26 backend tests pass, extension builds with ID `baeippkikgolnalkpiabdfhidjpploaa`, and the X flow was clicked through in a real browser (demo mode) and run against the live server (fixture research).
+
+**Not done / not verified yet:**
+- Live X research and live AI need an **xAI API key** (`XAI_API_KEY` in `.env`, then `PROVIDER_MODE=live`).
+- Google (Gmail/Calendar) needs the extension loaded in your real Chrome and **Connect Google**. Not tested yet.
+- **Team decision:** `TEAM-PLAN.md` says "no reusable message template", but this app keeps templates + the question bank as the differentiators. Confirm with the team.
+- Julia's capture code doesn't yet have job versioning ("switch jobs and keep old results", from the team plan). Nobody has built Maryam's person-research view (`/v1/person-research`) into the UI either.
+- Snowflake isn't used by the app (Cortex is blocked on the trial). It's optional storage for later.
+
+---
+
+Role A in SPEC §9 originally covered the side panel UI, the demo, `mock.ts`, `job-page.ts`, Snowflake setup, and Google Cloud OAuth setup. The notes below describe that first version. The UI parts are superseded by the merged app above.
 
 ## What I made
 
