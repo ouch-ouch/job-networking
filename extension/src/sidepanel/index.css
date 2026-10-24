@@ -1,0 +1,32 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --color-brand-50: #fbf6f1;
+  --color-brand-100: #f3e6d8;
+  --color-brand-200: #e6cdb2;
+  --color-brand-500: #a0643c;
+  --color-brand-600: #8a5230;
+  --color-brand-700: #6c3f25;
+  --color-brand-900: #3b2316;
+}
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--color-stone-50);
+  color: var(--color-stone-900);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Template editor: transparent textarea over a highlighted backdrop. Both layers must share these metrics. */
+.hl-layer {
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  letter-spacing: normal;
+}
