@@ -91,23 +91,28 @@ Cold outreach for coffee chats is repetitive: find the right people, find their 
 └─────────────────────────────────────┬───────────────────────────────────┘
                                       │ HTTPS
                      ┌────────────────▼────────────────┐
-                     │  Tiny backend (Vercel / Next.js │
-                     │  API routes or Express)         │
-                     │   POST /ai/parse-job            │
-                     │   POST /ai/fill-template        │
-                     │   POST /ai/follow-up            │
-                     │   POST /ai/classify-reply       │
-                     │   POST /ai/schedule-reply       │
-                     │   POST /ai/suggest-questions    │
-                     │   POST /ai/prep-brief           │
-                     │   POST /ai/thank-you            │
-                     │  Holds the Claude API key       │
-                     └─────────────────────────────────┘
+                     │  Backend (Vercel, Node/TS)      │
+                     │   POST /agent/run   ← Grok loop │
+                     │   POST /ai/*        (8 routes)  │
+                     │   POST /sync        → Snowflake │
+                     │  Holds the Snowflake PAT        │
+                     └────────────────┬────────────────┘
+                                      │ Cortex REST + SQL API
+                     ┌────────────────▼────────────────────────────┐
+                     │  Snowflake                                  │
+                     │   Cortex REST /v1/chat/completions          │
+                     │     model: grok-4.7  (agent + drafting)     │
+                     │   Cortex AI SQL functions                   │
+                     │     AI_EXTRACT, AI_CLASSIFY, AI_SENTIMENT,  │
+                     │     AI_EMBED / AI_SIMILARITY, AI_AGG        │
+                     │   Tables: contacts, drafts, activity,       │
+                     │     questions, meetings, targets            │
+                     └─────────────────────────────────────────────┘
 ```
 
-**Why a backend at all?** It keeps the Claude API key out of the extension bundle. If time is tight, call the API straight from the service worker with a key pasted into settings (fine for the demo only).
+**Why a backend at all?** It keeps the Snowflake token out of the extension bundle and is the only thing that talks to Snowflake.
 
-**Stack:** TypeScript, React, Vite + `@crxjs/vite-plugin` (extension build with hot reload), Tailwind, Claude API (`claude-sonnet-5-5` for drafts and briefs, `claude-haiku-5-5` for classifying replies), Gmail API, Google Calendar API.
+**Stack:** TypeScript, React, Vite + `@crxjs/vite-plugin` (extension build with hot reload), Tailwind, **Snowflake Cortex AI** (Grok `grok-4.7` as the agent, Cortex AI SQL functions for extraction, classification, and similarity), Snowflake tables as the system of record, Gmail API, Google Calendar API.
 
 ---
 
@@ -160,7 +165,7 @@ type Draft = {                 // one item in the Approval Queue
 type ActivityEvent = {
   id: string; contactId: string; at: number;
   type: "draft_created" | "approved" | "sent" | "reply_received"
-      | "follow_up_due" | "meeting_scheduled" | "error";
+      | "follow_up_due" | "meeting_scheduled" | "agent_step" | "error";
   summary: string;
   threadId?: string;           // Gmail thread for the messages view
 };
@@ -183,16 +188,16 @@ type Question = {              // question bank entry
 
 ---
 
-## 6. AI prompts (backend contracts)
+## 6. AI endpoints (backend contracts)
 
-All endpoints return JSON. Use structured output / tool use so the result always parses.
+All endpoints return JSON. Generative routes call Grok through the Cortex REST API with `response_format: { type: "json_schema", ... }` so the result always parses. Routes marked **SQL** run a Cortex AI SQL function instead (see §6b).
 
 | Endpoint | Input | Output |
 |---|---|---|
-| `/ai/parse-job` | `rawDescription` | `{ company, role, team, location, skills[] }` |
+| `/ai/parse-job` **SQL** | `rawDescription` | `{ company, role, team, location, skills[] }` |
 | `/ai/fill-template` | `template, profile, target, contact` | `{ subject?, body, filledKeywords }` |
 | `/ai/follow-up` | `originalDraft, followUpCount, daysSince, contact` | `{ subject?, body }` |
-| `/ai/classify-reply` | `replyText` | `{ intent: "interested" \| "proposes_time" \| "not_interested" \| "referral" \| "ooo", proposedTimes?: string[] }` |
+| `/ai/classify-reply` **SQL** | `replyText` | `{ intent: "interested" \| "proposes_time" \| "not_interested" \| "referral" \| "ooo", proposedTimes?: string[] }` |
 | `/ai/schedule-reply` | `replyText, availability, proposedTimes?` | `{ body, chosenSlot?: { start, end } }` |
 | `/ai/suggest-questions` | `profile, targets[], existingBank[]` | `{ questions: { text, category }[] }`: 5–10 new ones, no duplicates of the bank |
 | `/ai/prep-brief` | `contact (scraped profile), target, profile, approvedBank[]` | `{ summary, warmPathTalkingPoint, companyContext, picked: { questionId, tailoredText }[5], newQuestions?: { text, category }[] }`: picks from the bank first; adds new questions only to fill gaps |
@@ -207,12 +212,62 @@ All endpoints return JSON. Use structured output / tool use so the result always
 **Rules for `/ai/prep-brief` questions:**
 - Only pick questions with `status: "approved"`, and avoid repeating questions already used with the same company.
 - Tailoring may only swap in specifics (team, role, company); the question has to stay recognizable as the user's.
+- Shortlist candidates with **`AI_SIMILARITY`** (question text vs. contact profile + job) first, then let Grok pick the final 5 from the top 15.
+
+---
+
+## 6a. Grok agent (via Snowflake Cortex)
+
+Grok (`grok-4.7`, called through Cortex REST `POST /api/v2/cortex/v1/chat/completions` with `tools`) is the agent that runs the outreach loop. The backend runs a standard tool-calling loop: send messages + tools, run whatever tool Grok calls, append the result, repeat until Grok returns a final answer (max 8 steps).
+
+**When it runs** (`POST /agent/run` with a trigger):
+| Trigger | What Grok does |
+|---|---|
+| `new_target` | Parse the job, rank the scraped contacts, pick the top N, draft an initial message for each |
+| `tick` (scheduler) | Look at contacts that are due, decide follow up / wait / mark cold, draft follow-ups |
+| `reply_received` | Classify the reply, then draft a scheduling reply, propose a slot, or stop |
+| `meeting_soon` | Build the prep brief from the question bank |
+| `meeting_done` | Draft the thank-you + referral ask from the user's notes |
+
+**Tools Grok can call** (all implemented in the backend):
+`get_profile`, `get_template`, `get_contacts(targetId)`, `rank_contacts(targetId)` (runs the `AI_SIMILARITY` query), `fill_template(contactId)`, `classify_reply(text)` (runs `AI_CLASSIFY`), `get_availability()`, `search_question_bank(contactId)` (runs `AI_SIMILARITY`), `queue_draft(draft)`, `set_next_action(contactId, at)`, `log_activity(event)`.
+
+**Guardrail:** there is **no send tool**. The most Grok can do is `queue_draft`, which puts the message in the Approval Queue. Sending only happens when the user clicks Approve in the extension.
+
+**Agent trace in the UI:** every tool call is logged to `activity` with `type: "agent_step"`, so the Activity bar can show "Grok ranked 12 contacts → drafted 5 messages" with an expandable trace. Judges like seeing the agent's steps.
+
+## 6b. How else we use Snowflake AI
+
+Each one replaces a hand-written prompt with a Snowflake-native feature, which is cheaper, faster, and easy to show in the demo.
+
+| Feature | Snowflake AI used | How |
+|---|---|---|
+| Parse job description | `AI_EXTRACT` | `AI_EXTRACT(text => :jd, responseFormat => ['company','role','team','location','skills'])` |
+| Reply intent | `AI_CLASSIFY` | Categories: `interested`, `proposes_time`, `not_interested`, `referral`, `ooo` |
+| Proposed meeting times | `AI_EXTRACT` | Pull `proposed_times` from the reply, then Grok picks a slot that matches the user's availability |
+| Reply warmth | `AI_SENTIMENT` | Show a warm / neutral / cold badge on each reply in the Messages bar |
+| Contact ranking | `AI_EMBED` + `AI_SIMILARITY` | Similarity of the job description to each contact's headline + experience, plus a warm-path boost in SQL |
+| Question bank picking | `AI_SIMILARITY` | Shortlist relevant approved questions for each meeting |
+| Duplicate questions | `AI_SIMILARITY` | Skip AI-suggested questions with similarity above 0.9 to one already in the bank |
+| Insights panel (P2) | `AI_AGG` | "What do my replied-to messages have in common?" over `drafts` joined to `activity` |
+| Privacy (P2) | `AI_REDACT` | Strip personal info from message bodies before they're stored for analytics |
+
+**Data sync:** `chrome.storage.local` stays the live cache for the UI. The backend writes every contact, draft, question, meeting, and activity event to Snowflake (`POST /sync`), so the SQL AI functions above can run on real rows. Tables mirror the types in §5, one table per type, with a `user_id` column.
+
+**Setup checklist (first 20 minutes):**
+1. Create a Snowflake trial account (or use the hackathon-provided one).
+2. Turn on cross-region inference, which Grok needs: `ALTER ACCOUNT SET CORTEX_ENABLED_CROSS_REGION = 'ANY_REGION';` (needs ACCOUNTADMIN).
+3. Create a role with `SNOWFLAKE.CORTEX_USER`, a warehouse, and a database `COFFEE_CHAT` with the tables.
+4. Create a programmatic access token (PAT) for the backend and put it in Vercel env vars with the account URL.
+5. Smoke test: one `AI_COMPLETE('grok-4.7', 'say hi')` in a worksheet, then one REST call from the backend.
+
+**Fallback:** if Grok isn't available on the account, switch the model string to `claude-sonnet-4-6` on the same Cortex endpoint. Nothing else changes.
 
 ---
 
 ## 7. Follow-up engine
 
-- `chrome.alarms` runs every 15 minutes (every 1 minute in demo mode).
+- `chrome.alarms` runs every 15 minutes (every 1 minute in demo mode) and calls `POST /agent/run` with the matching trigger. The steps below are what the Grok agent is instructed to do; the hard limits (max follow-ups, intervals) are also checked in code.
 - For each contact where `stage ∈ {sent, followed_up}` and `nextActionAt <= now`:
   1. Check Gmail for a reply on the thread. If there is one, set `stage = replied` and classify it.
   2. If there's no reply and `followUpCount < MAX_FOLLOW_UPS (2)`: generate a follow-up draft, put it in the Approval Queue, and set `nextActionAt = now + interval[followUpCount]` (3 days, then 7).
@@ -249,39 +304,43 @@ The hardest role: everything else plugs into it.
 - Rate limits + "stop on reply" logic
 - **Hour 0 deliverable:** scaffold + shared types pushed by 0:20 so everyone can start
 
-### B — LinkedIn + sourcing *(master's student)*
-LinkedIn's DOM is messy and changes often, so this role takes the most debugging.
+### B — LinkedIn + Google channels *(master's student)*
+LinkedIn's DOM is messy and changes often, so this role takes the most debugging. It also owns the Gmail and Calendar integration, since those are the other outreach channels.
 - `linkedin-search.ts`: scrape people-search results → `Contact[]` (name, title, profile URL, degree)
 - `linkedin-profile.ts`: scrape education + experience → `warmPaths`; fill the connect note / message box; "Mark sent" button
 - Warm-path scoring → `relevance` + `reason`
 - Email pattern guesser + company-domain lookup, with a confidence score
-- `job-page.ts`: grab job description text from LinkedIn / Greenhouse / Lever postings
 - Build the search URL from a `Target` (company + role keywords + NYU filter)
-
-### C — AI backend + Google APIs *(master's student)*
-- `backend/`: all 8 `/ai/*` endpoints, the Claude API with structured output, and the prompts in §6
-- Make sure the 300-character LinkedIn limit and "picked questions must be approved" rules are enforced in code, not just in the prompt
 - `src/google/`: `chrome.identity` token flow, `gmail.ts` (send, list threads, fetch replies), `calendar.ts` (create event with Meet link + invite, patch the description)
+
+### C — Snowflake AI + Grok agent *(master's student)*
+- `backend/`: the Cortex REST client, the Grok tool-calling loop (`/agent/run`) and its tools (§6a), all 8 `/ai/*` endpoints and their prompts
+- The Snowflake SQL behind `AI_EXTRACT`, `AI_CLASSIFY`, `AI_SENTIMENT`, and the `AI_EMBED` / `AI_SIMILARITY` ranking queries (§6b)
+- `/sync` route that writes extension state into the Snowflake tables
+- Make sure the 300-character LinkedIn limit, "no send tool", and "picked questions must be approved" rules are enforced in code, not just in the prompt
 - Deploy the backend (Vercel) and share the URL by 1:00
 
 ### A — Side panel UI + demo *(Rachel)*
 Builds against mock data from minute 0, then switches to D's `useStore` once it exists.
-- React screens: Onboarding/Profile, Template editor (highlight `{{placeholders}}`), Targets + Contacts list, **Approval Queue** (edit / approve / reject / regenerate), **Question Bank** (Add / Skip / edit cards), prep-brief view, post-chat notes prompt, **Activity / Messages bar**, pipeline board
+- React screens: Onboarding/Profile, Template editor (highlight `{{placeholders}}`), Targets + Contacts list, **Approval Queue** (edit / approve / reject / regenerate), **Question Bank** (Add / Skip / edit cards), prep-brief view, post-chat notes prompt, **Activity / Messages bar** (including the expandable Grok agent trace and reply-sentiment badges), pipeline board
 - Mock data file (`src/shared/mock.ts`) that other people can reuse for testing
-- Google Cloud project + OAuth client setup (a click-through task, done in the first 20 minutes, then hand the client ID to C)
+- `job-page.ts`: grab job description text from the open posting (`document.body.innerText` on LinkedIn / Greenhouse / Lever is enough)
+- **Snowflake setup** (§6b checklist): account, cross-region inference, role, warehouse, tables (the table SQL is a straight copy of §5), and the PAT. Hand the account URL + PAT to C.
+- Google Cloud project + OAuth client setup (a click-through task, done in the first 20 minutes, then hand the client ID to B)
 - Demo: seed data, the test LinkedIn account + test inboxes, the backup video, and the pitch
 
 ### Handoffs
 | From → To | What | By |
 |---|---|---|
 | D → everyone | Scaffold, `types.ts`, `messages.ts` | 0:20 |
-| A → C | OAuth client ID | 0:20 |
+| A → B | OAuth client ID | 0:20 |
+| A → C | Snowflake account URL + PAT, tables created | 0:25 |
 | A → everyone | `mock.ts` | 0:30 |
-| C → D | Backend URL + `google/*` functions | 1:00 |
-| B → D | Scrape + fill functions callable from the router | 1:15 |
+| C → D | Backend URL with `/agent/run` + `/ai/*` working | 1:00 |
+| B → D | Scrape + fill + `google/*` functions callable from the router | 1:15 |
 | D → A | `useStore` hook with live data | 1:15 |
 
-If Rachel finishes the UI early, the next most useful thing is writing and testing prompts with C, since that doesn't need deep code context.
+If Rachel finishes the UI early, the next most useful thing is writing and testing prompts with C in a Snowflake worksheet (`AI_COMPLETE('grok-4.7', ...)`), since that doesn't need deep code context.
 
 **Shared contract (agree on this in the first 20 minutes):** the types in §5 live in `src/shared/types.ts`, and the message-router actions in `src/shared/messages.ts`:
 `PARSE_JOB`, `SCRAPE_SEARCH`, `SCRAPE_PROFILE`, `GENERATE_DRAFTS`, `APPROVE_DRAFT`, `SEND_EMAIL`, `FILL_LINKEDIN`, `MARK_SENT`, `POLL_REPLIES`, `CREATE_MEETING`, `SUGGEST_QUESTIONS`, `UPDATE_QUESTION`, `GENERATE_PREP_BRIEF`, `SAVE_MEETING_NOTES`.
@@ -292,14 +351,14 @@ If Rachel finishes the UI early, the next most useful thing is writing and testi
 
 | Time | Milestone |
 |---|---|
-| 0:00–0:20 | Repo scaffold, `types.ts` + `messages.ts` agreed, Google Cloud OAuth client created, mock data in storage |
+| 0:00–0:20 | Repo scaffold, `types.ts` + `messages.ts` agreed, Google Cloud OAuth client created, Snowflake account + cross-region inference + tables ready, mock data in storage |
 | 0:20–1:30 | Everyone builds their area against mocks |
 | 1:30 | **Checkpoint:** paste job description → drafts in the queue → approve → email sends |
 | 1:30–2:15 | LinkedIn fill, warm-path ranking, reply detection, calendar booking, question bank + prep brief, follow-up + thank-you loop in demo mode |
 | 2:15–2:40 | Integration, bug bash, polish the Activity bar |
 | 2:40–3:00 | Freeze. Record a backup demo video, rehearse the pitch |
 
-**Cut order if behind:** Hunter verification → LinkedIn reply detection → automatic prep brief (keep the on-demand button) → question-bank categories/feedback (keep plain Add / Skip) → automatic thank-you trigger (keep a manual "Draft thank-you" button) → LinkedIn fill (fall back to "copy + open profile") → calendar (fall back to sending availability).
+**Cut order if behind:** `AI_AGG` insights / `AI_REDACT` → Hunter verification → LinkedIn reply detection → automatic prep brief (keep the on-demand button) → question-bank categories/feedback (keep plain Add / Skip) → automatic thank-you trigger (keep a manual "Draft thank-you" button) → LinkedIn fill (fall back to "copy + open profile") → calendar (fall back to sending availability). **Never cut:** the Grok agent loop and at least `AI_EXTRACT` + `AI_CLASSIFY`. If `/sync` is slow, call the SQL functions on the text directly without storing rows.
 
 ---
 
@@ -317,7 +376,11 @@ coffee-chat-copilot/
 │  │  ├─ google/           (C) gmail.ts, calendar.ts, auth.ts
 │  │  └─ shared/           types.ts, messages.ts, storage.ts
 │  └─ package.json
-└─ backend/                (C) AI endpoints
+├─ backend/                (C) Vercel API
+│  ├─ agent/               grok loop + tools
+│  ├─ ai/                  /ai/* routes
+│  └─ snowflake/           cortex REST client, SQL queries
+└─ snowflake/              (A) setup.sql: role, warehouse, tables
 ```
 
 ---
@@ -326,11 +389,11 @@ coffee-chat-copilot/
 
 1. During onboarding, click **Add** on a few AI-suggested questions to seed the question bank.
 2. Open a real job posting, then open the side panel and click "Network for this job".
-3. Show the 6 contacts it found, with NYU alumni ranked first and a reason on each ("NYU '22, same team").
+3. Show the 6 contacts it found, with NYU alumni ranked first and a reason on each ("NYU '22, same team"). Expand the agent trace in the Activity bar: "Grok called `rank_contacts` (Snowflake `AI_SIMILARITY`) → drafted 6 messages".
 4. Show the one template, then the 6 personalized drafts. Highlight the filled keywords and the warm-path hook.
 5. Approve 2. One email sends live, and a LinkedIn note is filled in on a test account for the user to click Send.
 6. Turn on demo mode. A follow-up draft appears in the queue on its own.
-7. Reply from a teammate's inbox: "Sure, Thursday at 3?" The AI classifies it, drafts a confirmation, you approve it, and the calendar event with a Meet link shows up. Its description holds the prep brief, with 5 questions picked from the bank you approved in step 1.
+7. Reply from a teammate's inbox: "Sure, Thursday at 3?" Snowflake `AI_CLASSIFY` tags it `proposes_time` and `AI_SENTIMENT` shows it as warm, Grok drafts a confirmation, you approve it, and the calendar event with a Meet link shows up. Its description holds the prep brief, with 5 questions picked from the bank you approved in step 1.
 8. Fast-forward past the meeting. Type a quick note, and a thank-you + referral ask appears in the queue.
 9. End on the Activity bar showing the whole timeline.
 
