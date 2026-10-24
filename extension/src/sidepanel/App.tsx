@@ -17,7 +17,6 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Circle,
   Clock3,
@@ -60,6 +59,7 @@ import type {
   Target,
 } from "../shared/types";
 import { useStore } from "../shared/useStore";
+import { TemplateEditor, TemplatePreview } from "./TemplateEditor";
 import {
   buildLinkedInSearchQuery,
   buildLinkedInSearchUrl,
@@ -318,7 +318,7 @@ export default function App() {
       <div className="loading-screen">
         <Coffee size={36} />
         <h2>
-          {error ? "Could not open your workspace." : "Warming things up."}
+          {error ? "Could not load your data." : "Loading…"}
         </h2>
         {error && (
           <>
@@ -353,7 +353,7 @@ export default function App() {
     { id: "network", label: "My network", icon: <UsersRound size={19} /> },
     {
       id: "approvals",
-      label: "Approval queue",
+      label: "Message approval queue",
       icon: <Inbox size={19} />,
       count: pending.length,
     },
@@ -362,7 +362,7 @@ export default function App() {
   ];
   const labels: Record<Page, string> = {
     network: "My network",
-    approvals: "Approval queue",
+    approvals: "Message approval queue",
     questions: "Question bank",
     activity: "Activity",
     template: "Your template",
@@ -389,12 +389,6 @@ export default function App() {
               <small>YOUR NETWORKING COPILOT</small>
             </span>
           </a>
-          <div className="workspace-label">
-            WORKSPACE{" "}
-            <span>
-              {s.profile.school || "Your network"} <ChevronDown size={12} />
-            </span>
-          </div>
           <nav aria-label="Main navigation">
             {navItems.map((n) => (
               <button
@@ -434,7 +428,7 @@ export default function App() {
               <span className="human-icon">
                 <ShieldCheck size={19} />
               </span>
-              <strong>Your words. Your call.</strong>
+              <strong>Nothing sends without you.</strong>
               <p>Every message waits for your approval before it goes out.</p>
             </div>
             <button
@@ -453,7 +447,6 @@ export default function App() {
         <div className="main-shell">
           <header className="topbar">
             <div className="breadcrumb">
-              Workspace <ChevronRight size={13} />
               <strong>{labels[page]}</strong>
             </div>
             <div className="topbar-right">
@@ -461,7 +454,7 @@ export default function App() {
                 className={`mode-indicator ${s.settings.demoMode ? "demo" : ""}`}
               >
                 <span />
-                {s.settings.demoMode ? "Demo workspace" : "Live workspace"}
+                {s.settings.demoMode ? "Demo mode" : "Live"}
               </span>
               <button
                 className="icon-button notifications"
@@ -504,18 +497,12 @@ export default function App() {
             {page === "network" && (
               <>
                 <div className="page-heading">
-                  <div className="eyebrow">
-                    <span /> GOOD CONNECTIONS START WITH A HELLO
-                  </div>
                   <div className="heading-line">
                     <div>
-                      <h1>
-                        Your next chapter starts
-                        <br className="desktop-break" /> with a conversation.
-                      </h1>
+                      <h1>Start a conversation.</h1>
                       <p>
-                        Find your people. Make the first move. We’ll help with
-                        the rest.
+                        Add a job you’re applying to, find people who work
+                        there, and send messages you’ve approved.
                       </p>
                     </div>
                     <button
@@ -528,7 +515,7 @@ export default function App() {
                 </div>
                 <div className="stats-grid">
                   <Stat
-                    label="People in your orbit"
+                    label="People"
                     value={s.contacts.length}
                     detail={`${s.contacts.filter((c) => c.warmPaths.length).length} with a warm connection`}
                     icon={<UsersRound size={19} />}
@@ -536,11 +523,11 @@ export default function App() {
                   <Stat
                     label="Outreach sent"
                     value={sent}
-                    detail="One thoughtful hello at a time"
+                    detail="Messages you’ve sent"
                     icon={<Send size={18} />}
                   />
                   <Stat
-                    label="Conversations started"
+                    label="Conversations"
                     value={conversations}
                     detail={`${upcoming} coffee chat${upcoming === 1 ? "" : "s"} on the calendar`}
                     icon={<MessageSquare size={19} />}
@@ -553,7 +540,7 @@ export default function App() {
                         <h2>
                           Your people <span>{contacts.length}</span>
                         </h2>
-                        <p>A little common ground goes a long way.</p>
+                        <p>Closest connections first.</p>
                       </div>
                       <button
                         className="button subtle compact"
@@ -715,7 +702,7 @@ export default function App() {
                                         type: "GENERATE_DRAFTS",
                                         contactIds: [c.id],
                                       },
-                                      "Draft added to your approval queue",
+                                      "Draft added to your message approval queue",
                                     )
                                   : setSelected(c.id)
                               }
@@ -762,13 +749,12 @@ export default function App() {
                           <span className="mini-icon">
                             <Inbox size={18} />
                           </span>
-                          <h2>Ready for your eyes</h2>
+                          <h2>Waiting for approval</h2>
                         </div>
                         <Badge tone="amber">{pending.length}</Badge>
                       </div>
                       <p className="section-intro">
-                        A few words from you.
-                        <br />A new connection on the other side.
+                        Drafts to review. Nothing sends until you approve it.
                       </p>
                       {pending.slice(0, 2).map((d) => {
                         const c = s.contacts.find((c) => c.id === d.contactId);
@@ -818,7 +804,7 @@ export default function App() {
                           setQueueTab("pending");
                         }}
                       >
-                        Open approval queue <ArrowRight size={15} />
+                        Open message approval queue <ArrowRight size={15} />
                       </button>
                       <div className="approval-note">
                         <ShieldCheck size={12} /> Nothing sends until you say
@@ -829,15 +815,13 @@ export default function App() {
                       <span className="tip-icon">
                         <Coffee size={21} />
                       </span>
-                      <div className="eyebrow">THE COFFEE CHAT PLAYBOOK</div>
+                      <div className="eyebrow">TIP</div>
                       <h3>
-                        Be curious.
-                        <br />
-                        The rest will follow.
+                        Bring a few good questions.
                       </h3>
                       <p>
-                        The best coffee chats feel like conversations, not
-                        interviews. Bring a few good questions.
+                        Coffee chats go better as conversations than
+                        interviews. Save questions in your question bank.
                       </p>
                       <button
                         className="text-button"
@@ -896,9 +880,9 @@ export default function App() {
             {page === "approvals" && (
               <>
                 <PageHeading
-                  eyebrow="A HUMAN TOUCH, EVERY TIME"
-                  title="Make it sound like you."
-                  description="Review each message, give it your voice, then decide when to send."
+                  eyebrow="REVIEW BEFORE SENDING"
+                  title="Message approval queue"
+                  description="Edit, approve, or skip each draft. Nothing is sent until you approve it."
                 />
                 <div className="queue-toolbar">
                   <div className="tabs">
@@ -984,9 +968,9 @@ export default function App() {
               <>
                 <div className="heading-line">
                   <PageHeading
-                    eyebrow="EVERY HELLO ADDS UP"
-                    title="Your momentum, in one place."
-                    description="From the first message to the next coffee chat."
+                    eyebrow="HISTORY"
+                    title="Activity"
+                    description="Everything that's happened: messages sent, replies, and coffee chats."
                   />
                   <button
                     className="button outline"
@@ -1023,7 +1007,7 @@ export default function App() {
                             type: "RUN_SCHEDULER",
                             now: Date.now() + 8 * 86400000,
                           },
-                          "Demo clock advanced. Check your approval queue.",
+                          "Demo clock advanced. Check your message approval queue.",
                         )
                       }
                     >
@@ -2116,24 +2100,12 @@ function TemplatePage({
   const [body, setBody] = useState(s.template.body),
     [subject, setSubject] = useState(s.template.subject || ""),
     [channel, setChannel] = useState(s.template.channel);
-  const placeholders = [
-    "first_name",
-    "my_name",
-    "my_year",
-    "my_school",
-    "my_major",
-    "company",
-    "role",
-    "their_team",
-    "personal_hook",
-    "my_availability",
-  ];
   return (
     <>
       <PageHeading
-        eyebrow="WRITE IT ONCE. MAKE IT PERSONAL."
-        title="Your voice, with a little help."
-        description="We fill the placeholders. Everything else stays the way you wrote it."
+        eyebrow="MESSAGE TEMPLATE"
+        title="Write your message once."
+        description="Type it the way you'd say it. Click a field to add details that change for each person; the rest stays exactly as you wrote it."
       />
       <div className="settings-layout">
         <form
@@ -2167,33 +2139,27 @@ function TemplatePage({
             </select>
           </label>
           {channel === "email" && (
-            <label className="field">
-              Subject
-              <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Coffee chat about {{company}}?"
-              />
-            </label>
-          )}
-          <label className="field">
-            Your message
-            <textarea
-              rows={12}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              required
+            <TemplateEditor
+              label="Subject"
+              singleLine
+              value={subject}
+              onChange={setSubject}
+              profile={s.profile}
+              placeholder="Coffee chat about the role?"
             />
-          </label>
-          <div className="placeholder-pills">
-            {placeholders.map((p) => (
-              <button
-                type="button"
-                key={p}
-                onClick={() => setBody((b) => b + ` {{${p}}}`)}
-              >{`{{${p}}}`}</button>
-            ))}
-          </div>
+          )}
+          <TemplateEditor
+            label="Your message"
+            value={body}
+            onChange={setBody}
+            profile={s.profile}
+            placeholder="Hi, I'm a student at…"
+          />
+          <TemplatePreview
+            subject={channel === "email" ? subject : undefined}
+            body={body}
+            profile={s.profile}
+          />
           {channel === "linkedin_connect" && (
             <p className="field-help">
               Filled connection notes must fit within 300 characters. Keep the
@@ -2210,10 +2176,11 @@ function TemplatePage({
           <span className="mini-icon">
             <WandSparkles size={21} />
           </span>
-          <h2>Personal, by design.</h2>
+          <h2>How the personal hook works</h2>
           <p>
-            Your copilot finds the strongest real connection and puts it in{" "}
-            <code>{"{{personal_hook}}"}</code>.
+            Add the <strong>Personal hook</strong> field and the AI writes one
+            line from a real connection: a shared school, a past employer, or
+            something they posted. If there’s nothing real, it’s left out.
           </p>
           <div className="template-example">
             <small>A WARM CONNECTION</small>
@@ -2270,9 +2237,9 @@ function QuestionsPage({
     <>
       <div className="heading-line">
         <PageHeading
-          eyebrow="CURIOSITY IS A SUPERPOWER"
-          title="Come with good questions."
-          description="A collection of conversation starters, chosen by you."
+          eyebrow="FOR YOUR COFFEE CHATS"
+          title="Question bank"
+          description="Questions you want to ask. Prep briefs pick from the ones you've added."
         />
         <button
           className="button primary"
@@ -2499,9 +2466,9 @@ function SettingsPage({
   return (
     <>
       <PageHeading
-        eyebrow="LET’S MAKE THE INTRODUCTION"
-        title="Start with your story."
-        description="A little context helps your outreach feel a lot more like you."
+        eyebrow="YOUR PROFILE"
+        title="Settings & profile"
+        description="Your school, year, major, and background get filled into every message."
       />
       <div className="settings-layout">
         <form
@@ -2716,7 +2683,7 @@ function SettingsPage({
               </button>
             </div>
             <p className="field-help">
-              Demo and live data are kept in separate workspaces.
+              Demo and live data are kept separate.
             </p>
             <div className="limits-line">
               <ShieldCheck size={16} />
@@ -2732,10 +2699,10 @@ function SettingsPage({
                 className="text-button muted"
                 disabled={busy}
                 onClick={() =>
-                  void run({ type: "RESET_DEMO" }, "Demo workspace reset")
+                  void run({ type: "RESET_DEMO" }, "Demo data reset")
                 }
               >
-                Reset demo workspace <RefreshCw size={13} />
+                Reset demo data <RefreshCw size={13} />
               </button>
             )}
           </section>
@@ -2972,7 +2939,7 @@ function ContactDetail({
                 <WandSparkles size={15} /> Draft outreach
               </button>
               <button className="button outline" onClick={onQueue}>
-                View approval queue <ArrowRight size={14} />
+                View message approval queue <ArrowRight size={14} />
               </button>
             </div>
             {s.settings.demoMode && (
