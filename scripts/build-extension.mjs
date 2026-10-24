@@ -31,7 +31,11 @@ const manifest = {
     "http://127.0.0.1/*",
   ],
   side_panel: { default_path: "index.html" },
-  action: { default_title: "Open Coffee Chat Copilot" },
+  icons: { 16: "icons/icon-16.png", 32: "icons/icon-32.png", 48: "icons/icon-48.png", 128: "icons/icon-128.png" },
+  action: {
+    default_title: "Open Coffee Chat Copilot",
+    default_icon: { 16: "icons/icon-16.png", 32: "icons/icon-32.png" },
+  },
   background: { service_worker: "background.js", type: "module" },
   content_scripts: [
     {
