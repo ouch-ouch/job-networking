@@ -1,4 +1,4 @@
-import type { AppState, Contact, Draft, Question } from "./types";
+import type { AppState, Contact, Draft, Question, Target } from "./types";
 
 export const DEFAULT_TEMPLATE = {
   id: "default",
@@ -264,6 +264,51 @@ export function createDemoState(now = Date.now()): AppState {
       profiles: 0,
     },
   };
+}
+
+/** Fictional people for demo mode's "Find people on X". No X search runs. */
+export function demoXContacts(target: Target): Contact[] {
+  const people = [
+    {
+      handle: "devon_builds_demo",
+      name: "Devon Reyes",
+      title: "Software Engineer",
+      reason: `Their X bio says they're an engineer at ${target.company}. Posts about the systems behind ${target.team || target.role} and answers student questions.`,
+      post: "Hot take: the best intern projects are the boring reliability ones. You learn the whole stack.",
+      relevance: 88,
+    },
+    {
+      handle: "priya_recruits_demo",
+      name: "Priya Shah",
+      title: "University Recruiter",
+      reason: `Their X bio says they recruit for ${target.company}. Shared that ${target.company} is hiring early-career ${target.role} candidates this season.`,
+      post: "Early-career apps are open! Tip: a short note about a real project beats a perfect cover letter.",
+      relevance: 81,
+    },
+    {
+      handle: "sam_ships_demo",
+      name: "Sam Okafor",
+      title: "Software Engineer",
+      reason: `Says in their X posts they used to work at ${target.company}. Writes threads about breaking into the industry from a non-target background.`,
+      post: "Thread: 5 things I wish I knew before my first engineering internship.",
+      relevance: 70,
+    },
+  ];
+  return people.map((p) => ({
+    id: `demo_x_${p.handle}_${target.id}`,
+    targetId: target.id,
+    name: p.name,
+    title: p.title,
+    company: target.company,
+    xHandle: p.handle,
+    xUrl: `https://x.com/${p.handle}`,
+    xPost: { url: `https://x.com/${p.handle}`, excerpt: p.post },
+    warmPaths: [],
+    relevance: p.relevance,
+    reason: p.reason,
+    stage: "found" as const,
+    followUpCount: 0,
+  }));
 }
 
 export const mockState = createDemoState();

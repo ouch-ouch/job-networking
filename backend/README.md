@@ -4,13 +4,15 @@ Finds relevant people on X for a job, reads a selected person's recent public co
 
 ## Run
 
+From the **repo root** (this folder is an npm workspace; there is one install and one `.env`):
+
 ```bash
-cd backend
 npm install
 cp .env.example .env        # set BACKEND_TOKEN; set XAI_API_KEY for live mode
-set -a; source .env; set +a
-npm run dev                 # http://localhost:8787
+npm run server              # http://127.0.0.1:8787, reads the root .env
 ```
+
+The same server also hosts the coffee-chat AI routes (`/health`, `/ai/*`: template filling, questions, prep briefs) in `src/coffee/`.
 
 To run without an xAI key, use `PROVIDER_MODE=fixture`. Fixture responses are demo data and carry `mode: "fixture"`; label them as such in the UI.
 

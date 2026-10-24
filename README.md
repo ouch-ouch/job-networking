@@ -1,63 +1,51 @@
-# Coffee Chat Copilot
+# coffeechat (networkMAX)
 
-A Chrome side panel that helps you turn a job opportunity into a thoughtful coffee chat. Write your outreach template once, find people with a warm connection, and review every message before sending.
+A Chrome side panel that turns a job posting into coffee chats. Find people on **X** (Grok research), LinkedIn, or the web; write your message **once** as a template and let the AI fill in the `{{keywords}}` for each person (the hook comes from something real, like their X post); build a **question bank** for the chat; and review every message before it goes anywhere.
 
-## Teammates: test the `julia` branch
+This is the merged app: Julia's UI and coffee-chat engine, Maryam's Grok/X research backend, Sushant's X wiring, and Rachel's setup and specs. See [what came from where](docs/rachel-tasks.md#merged-app-integration-branch).
 
-This branch combines the Coffee Chat interface and Chrome extension with the team's Grok/X research backend. Run all commands below from the **repository root**; the backend is an npm workspace.
+## Run it
 
-Requires **Node.js 20+**, npm, and **Google Chrome 116+** for extension features.
+Requires Node.js 20.12+, npm, and Google Chrome 116+ for extension features.
 
 ```bash
-git clone --branch julia --single-branch https://github.com/ouch-ouch/job-networking.git
-cd job-networking
-npm ci
-npm run dev
+npm install            # one install for the app and the backend (npm workspace)
+cp .env.example .env   # one .env for everything; see the comments inside
+npm run server         # backend on http://127.0.0.1:8787 (leave it running)
+npm run dev            # app on http://127.0.0.1:5173
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The demo works immediately with fictional contacts and simulated sends; no keys or Google configuration are needed. Use the walkthrough below to test the complete demo flow.
+Open **http://127.0.0.1:5173**. It starts in demo mode with fictional people and simulated sends, so you need no keys. **Find people → Find people on X** works in demo mode too (fictional, labeled people).
 
-If you already have the repository, save your current changes, run `git fetch origin`, and switch to `julia` before running `npm ci`.
-
-| What you want to test | Setup needed |
+| What you want to test | What you need |
 | --- | --- |
-| UI, approval flow, simulated outreach, meetings, and follow-ups | Demo commands above |
-| Real Grok job parsing, personalized drafts, and smart web-search queries | Local `.env` with `XAI_API_KEY`, a running backend, and Demo mode off |
-| Live LinkedIn result imports and composer filling | Built extension loaded in Chrome and an open, signed-in LinkedIn tab |
-| Real Gmail sends/replies and Calendar invitations | Built extension, matching Google OAuth client, enabled APIs, test-user access, and Google consent |
+| UI, templates, question bank, approval flow, X flow with fictional people | Nothing beyond the commands above |
+| Real X research (Grok X Search) | `XAI_API_KEY` and `PROVIDER_MODE=live` in `.env`, a running backend, demo mode off |
+| Real template filling, questions, prep briefs, job parsing | `XAI_API_KEY` in `.env`, a running backend, demo mode off |
+| Gmail, Calendar, LinkedIn import/fill | The built extension loaded in Chrome (below), plus Google setup in [docs/SETUP.md](docs/SETUP.md) |
 
-### Enable live AI and the extension
+Without an xAI key, set `PROVIDER_MODE=fixture` so the backend still starts; X research then returns labeled fixture people.
 
-1. On a fresh clone, copy `.env.example` to `.env`. Set your own `XAI_API_KEY` and a local `BACKEND_TOKEN` of at least 16 characters; the backend and extension build must use the same token. Keep the supplied model defaults unless your API account requires another supported model. Each developer runs their own backend. Share team credentials only through your team's approved secret-sharing channel, never through Git.
-2. In one terminal, run `npm run server` and leave it running. In the app, use backend URL `http://127.0.0.1:8787`. **Settings → Test connection** checks reachability and key presence; a successful live AI task checks actual provider access.
-3. Run `npm run build`. In Chrome, open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and choose this clone's **`dist`** folder.
-4. Click Chrome's puzzle-piece menu, pin **Coffee Chat Copilot**, and click its icon to open the side panel. In **Settings**, turn **Demo mode off** and save your own name, school, major, background, availability, and signature. Also review your message template.
-5. For Gmail/Calendar, follow **[docs/SETUP.md](docs/SETUP.md)**. Each developer needs an OAuth client matching their extension ID, or a deliberately coordinated stable public extension key/client. The Google Cloud project owner must add each connecting Google account as a test user. Julia's local OAuth connection and API key are not included in this repository.
-6. Add a target job with its full description. Choose **Find people → Create smart searches**. Grok combines the job, team, company, and saved profile into editable Google/Bing queries. Review the resulting profiles. Add people found on the web manually, or use **Import LinkedIn results** on an open LinkedIn people-results tab.
+### One backend
 
-App records are stored locally in each browser/extension installation. The browser preview and extension also have separate storage. Teammates can test the same code independently; contacts, drafts, Google connections, and approvals do **not** sync across computers. There is no shared database or hosted backend in this branch.
+`npm run server` starts one Hono server (`backend/`) with two route groups:
 
-### Pull updates and load the latest build
+- `/v1/*`: X research and person-specific drafts (Maryam). Needs `BACKEND_TOKEN`; the build bakes the same value into the extension.
+- `/ai/*` and `/health`: template filling, question suggestions, prep briefs, job parsing, reply handling (Julia). Origin-checked; localhost and the extension only.
+
+### Load the extension (needed for Google)
 
 ```bash
-git pull --ff-only
-npm ci
 npm run build
 ```
 
-Restart `npm run server` after backend or `.env` changes. At `chrome://extensions`, click **Reload ↻** on Coffee Chat Copilot. Refresh any already-open LinkedIn/job tabs, then close and reopen the side panel. Refreshing a normal webpage alone does not reload the extension.
+In Chrome: `chrome://extensions` → **Developer mode** on → **Load unpacked** → choose this repo's **`dist`** folder. The extension ID is always **`baeippkikgolnalkpiabdfhidjpploaa`** (a pinned public key in `scripts/build-extension.mjs`), which is the ID our Google OAuth client is registered for. So teammates don't need their own OAuth clients; the Google Cloud owner only has to add each person's Google account as a **test user**.
 
-The current people-search screen says **“Find a shared path”** and has a **“Create smart searches”** button. **“Find a warm way in”** identifies an older loaded build. If needed, use **Load unpacked** again and check that you selected this clone's `dist` directory.
+After pulling changes: `npm install`, `npm run build`, then **Reload ↻** the extension and refresh any open job or LinkedIn tabs.
 
-### If LinkedIn import appears unresponsive
+### Before calling a live test successful
 
-In live mode, open a **LinkedIn people-results page** (`linkedin.com/search/results/people/`) in the active Chrome tab, then use the extension side panel. Google/Bing search pages and individual profiles are not import sources; add those people manually. The import footer shows whether the active tab is ready and disables Import when the source is unsupported. The normal browser preview cannot import live pages.
-
-While reading, the button says **Importing…**. Errors and duplicate-only results remain beside the button. If everyone on the page was already added to this target, the app explains that instead of silently importing zero people. A missing or stale reader is refreshed once automatically; an unavailable reader times out with a visible error. Reload the extension after pulling/rebuilding the code. The daily limit is 20 newly imported profiles; manual contacts remain available.
-
-### Before reporting a live test as successful
-
-Run `npm test` and `npm run build`. Live job parsing and search planning have been exercised with Grok; the automated suite uses mocks for Gmail/Calendar and never sends real outreach. For an end-to-end test, use a separate inbox you control, confirm its address in the contact form, generate/review/approve/send one message, reply from that inbox, and check reply detection. Create a test Calendar event only when you intend to send its attendee invitation. See the detailed verification steps in [docs/SETUP.md](docs/SETUP.md#4-verify-real-actions-in-order).
+Run `npm test` and `npm run build`. Mocked tests never send real outreach. For live sends, use inboxes and accounts you control; see [docs/SETUP.md](docs/SETUP.md#4-verify-real-actions-in-order).
 
 ## Run the demo
 
@@ -81,7 +69,7 @@ Open **http://127.0.0.1:5173**. The app starts in a persistent demo workspace wi
 
 **Settings → Reset demo workspace** restores the initial demo. No real email or calendar invitation is sent in demo mode.
 
-## Load the Chrome extension
+## Load the Chrome extension (details)
 
 ```bash
 npm run build
@@ -109,6 +97,7 @@ AI now uses **Grok (xAI)** through the xAI Responses API with structured JSON Sc
 
 ## What is implemented
 
+- **Find people on X:** Grok X Search finds up to three people tied to the job, each with the real post that makes them relevant. X drafts are filled from your template (the hook can reference their post); you copy, open X, send it yourself, and mark it sent.
 - Profile, one message template, job description parsing, manual contacts, target filtering, contact search and warm-path ranking.
 - Grok search plans use the full job description, role, team, company and saved profile to propose 3–6 searches for alumni, similar backgrounds, relevant teams and recruiting contacts. Each query is editable and opens in Google or Bing. These are search hypotheses to review, not verified people or connections. A manual LinkedIn search starts with the company only, with optional role or school presets.
 - Active-tab LinkedIn people search import (up to 20 visible results, including whole-card result layouts), explicit-domain email pattern guesses, confirmed-email correction, and job text capture from supported job sites. People found elsewhere on the web can be added manually.
@@ -147,15 +136,17 @@ extension/src/
   background/      Chrome action router and alarms
   content/         LinkedIn/job-page reading and manual composer filling
   google/          Chrome OAuth, Gmail, Calendar
-backend/src/       Local Express API, validated AI contracts and prompts
+backend/src/       One Hono server: X research (/v1), coffee-chat AI routes (coffee/, /ai)
+backend/test/      Backend tests (vitest)
 tests/             Engine, sourcing, and integration tests
 scripts/           Manifest generation and extension bundling
-docs/SPEC.md       Original product specification
+docs/             Specs (SPEC, X-NETWORKING-SPEC, GROK-BACKEND-SPEC), TEAM-PLAN, SETUP
+snowflake/        Snowflake setup (storage only; Cortex AI is blocked on the trial)
 ```
 
 ## Personal X/Grok direction
 
-See [Sushant’s X networking spec](docs/X-NETWORKING-SPEC.md): open a job portal, recognize the posting, use Grok research to find relevant people on X, and compose person-specific interactions without fixed templates. The existing [hackathon spec](docs/SPEC.md) remains available as a separate proposal.
+See [Sushant’s X networking spec](docs/X-NETWORKING-SPEC.md): open a job portal, recognize the posting, use Grok research to find relevant people on X, and compose person-specific interactions. **Open question for the team:** that spec says "no fixed templates", but this merged app keeps the user-written template with AI-filled keywords (plus the question bank) as the app's key differentiators, grounding the hook in the person's real X post. The [hackathon spec](docs/SPEC.md) describes the template approach.
 
 [Tsenta research](docs/TSENTA-RESEARCH.md) records the reference frontend findings.
 

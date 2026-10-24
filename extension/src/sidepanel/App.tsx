@@ -17,13 +17,13 @@ import {
   Check,
   CheckCheck,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Circle,
   Clock3,
   Coffee,
   AtSign,
   Copy,
+  Presentation,
   ExternalLink,
   FileText,
   Inbox,
@@ -52,6 +52,8 @@ import type {
   AppState,
   Contact,
   Draft,
+  Meeting,
+  DemoSceneId,
   PeopleSearchPlan,
   Profile,
   Question,
@@ -60,6 +62,8 @@ import type {
   Target,
 } from "../shared/types";
 import { useStore } from "../shared/useStore";
+import { DEMO_SCENES, SAMPLE_JOB_POSTING } from "../shared/demoScenes";
+import { TemplateEditor, TemplatePreview } from "./TemplateEditor";
 import {
   buildLinkedInSearchQuery,
   buildLinkedInSearchUrl,
@@ -70,7 +74,13 @@ import { grabJobPage } from "../content";
 const DialogErrorContext = createContext<string | null>(null);
 
 type Page =
-  "network" | "approvals" | "questions" | "activity" | "template" | "settings";
+  | "network"
+  | "approvals"
+  | "chats"
+  | "questions"
+  | "activity"
+  | "template"
+  | "settings";
 type Modal = "target" | "contact" | "source" | null;
 const stageLabels: Record<Stage, string> = {
   found: "Found",
@@ -248,9 +258,49 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const openChat = (meetingId: string) => {
+    setChatId(meetingId);
+    setPage("chats");
+  };
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [queueTab, setQueueTab] = useState("pending");
+  const [presenter, setPresenter] = useState(false);
+  /** Load a presentation scene and jump to the screen it's about. */
+  async function loadScene(scene: DemoSceneId) {
+    const result = await run({ type: "LOAD_DEMO_SCENE", scene });
+    if (!result) return;
+    setModal(null);
+    setSelected(null);
+    setTargetId("all");
+    setFilter("all");
+    setSearch("");
+    if (scene === "reply") {
+      setQueueTab("pending");
+      setPage("approvals");
+    } else if (scene === "chat") {
+      const meeting = result.state.meetings.find((m) => m.contactId === "demo_maya");
+      if (meeting) openChat(meeting.id);
+      else setPage("chats");
+    } else if (scene === "after") {
+      setPage("network");
+      setSelected("demo_maya");
+    } else setPage("network");
+  }
+  // Alt+1..5 jump to a scene, Alt+0 shows or hides the presenter panel (demo mode only).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!state?.settings.demoMode || !e.altKey) return;
+      const digit = /^Digit(\d)$/.exec(e.code)?.[1];
+      if (digit === undefined) return;
+      e.preventDefault();
+      if (digit === "0") setPresenter((v) => !v);
+      else if (DEMO_SCENES[Number(digit) - 1]) void loadScene(DEMO_SCENES[Number(digit) - 1].id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   useEffect(() => {
     if (toast) {
       const timeout = setTimeout(() => setToast(""), 4500);
@@ -318,7 +368,7 @@ export default function App() {
       <div className="loading-screen">
         <Coffee size={36} />
         <h2>
-          {error ? "Could not open your workspace." : "Warming things up."}
+          {error ? "Could not load your data." : "Loading…"}
         </h2>
         {error && (
           <>
@@ -353,16 +403,23 @@ export default function App() {
     { id: "network", label: "My network", icon: <UsersRound size={19} /> },
     {
       id: "approvals",
-      label: "Approval queue",
+      label: "Message approval queue",
       icon: <Inbox size={19} />,
       count: pending.length,
+    },
+    {
+      id: "chats",
+      label: "Coffee chats",
+      icon: <CalendarDays size={19} />,
+      count: upcomingChats(s).length,
     },
     { id: "questions", label: "Question bank", icon: <BookOpen size={19} /> },
     { id: "activity", label: "Activity", icon: <Clock3 size={19} /> },
   ];
   const labels: Record<Page, string> = {
     network: "My network",
-    approvals: "Approval queue",
+    approvals: "Message approval queue",
+    chats: "Coffee chats",
     questions: "Question bank",
     activity: "Activity",
     template: "Your template",
@@ -389,12 +446,6 @@ export default function App() {
               <small>YOUR NETWORKING COPILOT</small>
             </span>
           </a>
-          <div className="workspace-label">
-            WORKSPACE{" "}
-            <span>
-              {s.profile.school || "Your network"} <ChevronDown size={12} />
-            </span>
-          </div>
           <nav aria-label="Main navigation">
             {navItems.map((n) => (
               <button
@@ -434,7 +485,7 @@ export default function App() {
               <span className="human-icon">
                 <ShieldCheck size={19} />
               </span>
-              <strong>Your words. Your call.</strong>
+              <strong>Nothing sends without you.</strong>
               <p>Every message waits for your approval before it goes out.</p>
             </div>
             <button
@@ -453,7 +504,6 @@ export default function App() {
         <div className="main-shell">
           <header className="topbar">
             <div className="breadcrumb">
-              Workspace <ChevronRight size={13} />
               <strong>{labels[page]}</strong>
             </div>
             <div className="topbar-right">
@@ -461,7 +511,7 @@ export default function App() {
                 className={`mode-indicator ${s.settings.demoMode ? "demo" : ""}`}
               >
                 <span />
-                {s.settings.demoMode ? "Demo workspace" : "Live workspace"}
+                {s.settings.demoMode ? "Demo mode" : "Live"}
               </span>
               <button
                 className="icon-button notifications"
@@ -495,6 +545,9 @@ export default function App() {
                 Demo mode · Fictional contacts and simulated sends. Your changes
                 are saved locally.
               </span>
+              <button onClick={() => setPresenter((v) => !v)}>
+                {presenter ? "Hide presenter" : "Presenter"} <Presentation size={12} />
+              </button>
               <button onClick={() => setPage("settings")}>
                 Set up live integrations <ArrowUpRight size={12} />
               </button>
@@ -504,18 +557,12 @@ export default function App() {
             {page === "network" && (
               <>
                 <div className="page-heading">
-                  <div className="eyebrow">
-                    <span /> GOOD CONNECTIONS START WITH A HELLO
-                  </div>
                   <div className="heading-line">
                     <div>
-                      <h1>
-                        Your next chapter starts
-                        <br className="desktop-break" /> with a conversation.
-                      </h1>
+                      <h1>Start a conversation.</h1>
                       <p>
-                        Find your people. Make the first move. We’ll help with
-                        the rest.
+                        Add a job you’re applying to, find people who work
+                        there, and send messages you’ve approved.
                       </p>
                     </div>
                     <button
@@ -528,7 +575,7 @@ export default function App() {
                 </div>
                 <div className="stats-grid">
                   <Stat
-                    label="People in your orbit"
+                    label="People"
                     value={s.contacts.length}
                     detail={`${s.contacts.filter((c) => c.warmPaths.length).length} with a warm connection`}
                     icon={<UsersRound size={19} />}
@@ -536,11 +583,11 @@ export default function App() {
                   <Stat
                     label="Outreach sent"
                     value={sent}
-                    detail="One thoughtful hello at a time"
+                    detail="Messages you’ve sent"
                     icon={<Send size={18} />}
                   />
                   <Stat
-                    label="Conversations started"
+                    label="Conversations"
                     value={conversations}
                     detail={`${upcoming} coffee chat${upcoming === 1 ? "" : "s"} on the calendar`}
                     icon={<MessageSquare size={19} />}
@@ -553,7 +600,7 @@ export default function App() {
                         <h2>
                           Your people <span>{contacts.length}</span>
                         </h2>
-                        <p>A little common ground goes a long way.</p>
+                        <p>Closest connections first.</p>
                       </div>
                       <button
                         className="button subtle compact"
@@ -715,7 +762,7 @@ export default function App() {
                                         type: "GENERATE_DRAFTS",
                                         contactIds: [c.id],
                                       },
-                                      "Draft added to your approval queue",
+                                      "Draft added to your message approval queue",
                                     )
                                   : setSelected(c.id)
                               }
@@ -762,13 +809,12 @@ export default function App() {
                           <span className="mini-icon">
                             <Inbox size={18} />
                           </span>
-                          <h2>Ready for your eyes</h2>
+                          <h2>Waiting for approval</h2>
                         </div>
                         <Badge tone="amber">{pending.length}</Badge>
                       </div>
                       <p className="section-intro">
-                        A few words from you.
-                        <br />A new connection on the other side.
+                        Drafts to review. Nothing sends until you approve it.
                       </p>
                       {pending.slice(0, 2).map((d) => {
                         const c = s.contacts.find((c) => c.id === d.contactId);
@@ -818,7 +864,7 @@ export default function App() {
                           setQueueTab("pending");
                         }}
                       >
-                        Open approval queue <ArrowRight size={15} />
+                        Open message approval queue <ArrowRight size={15} />
                       </button>
                       <div className="approval-note">
                         <ShieldCheck size={12} /> Nothing sends until you say
@@ -829,15 +875,13 @@ export default function App() {
                       <span className="tip-icon">
                         <Coffee size={21} />
                       </span>
-                      <div className="eyebrow">THE COFFEE CHAT PLAYBOOK</div>
+                      <div className="eyebrow">TIP</div>
                       <h3>
-                        Be curious.
-                        <br />
-                        The rest will follow.
+                        Bring a few good questions.
                       </h3>
                       <p>
-                        The best coffee chats feel like conversations, not
-                        interviews. Bring a few good questions.
+                        Coffee chats go better as conversations than
+                        interviews. Save questions in your question bank.
                       </p>
                       <button
                         className="text-button"
@@ -896,9 +940,9 @@ export default function App() {
             {page === "approvals" && (
               <>
                 <PageHeading
-                  eyebrow="A HUMAN TOUCH, EVERY TIME"
-                  title="Make it sound like you."
-                  description="Review each message, give it your voice, then decide when to send."
+                  eyebrow="REVIEW BEFORE SENDING"
+                  title="Message approval queue"
+                  description="Edit, approve, or skip each draft. Nothing is sent until you approve it."
                 />
                 <div className="queue-toolbar">
                   <div className="tabs">
@@ -977,16 +1021,26 @@ export default function App() {
                 )}
               </>
             )}
+            {page === "chats" && (
+              <ChatsPage
+                state={s}
+                run={run}
+                busy={busy}
+                chatId={chatId}
+                onChat={setChatId}
+                onContact={setSelected}
+              />
+            )}
             {page === "questions" && (
-              <QuestionsPage state={s} run={run} busy={busy} />
+              <QuestionsPage state={s} run={run} busy={busy} onOpenChat={openChat} />
             )}
             {page === "activity" && (
               <>
                 <div className="heading-line">
                   <PageHeading
-                    eyebrow="EVERY HELLO ADDS UP"
-                    title="Your momentum, in one place."
-                    description="From the first message to the next coffee chat."
+                    eyebrow="HISTORY"
+                    title="Activity"
+                    description="Everything that's happened: messages sent, replies, and coffee chats."
                   />
                   <button
                     className="button outline"
@@ -1023,7 +1077,7 @@ export default function App() {
                             type: "RUN_SCHEDULER",
                             now: Date.now() + 8 * 86400000,
                           },
-                          "Demo clock advanced. Check your approval queue.",
+                          "Demo clock advanced. Check your message approval queue.",
                         )
                       }
                     >
@@ -1097,7 +1151,7 @@ export default function App() {
                         <button
                           className="meeting-card"
                           key={m.id}
-                          onClick={() => setSelected(m.contactId)}
+                          onClick={() => openChat(m.id)}
                         >
                           <div className="meeting-date">
                             <strong>{new Date(m.start).getDate()}</strong>
@@ -1150,6 +1204,52 @@ export default function App() {
             </footer>
           </main>
         </div>
+        {presenter && s.settings.demoMode && (
+          <aside className="presenter-panel" aria-label="Presenter controls">
+            <div className="presenter-top">
+              <strong>
+                <Presentation size={15} /> Presenter
+              </strong>
+              <button
+                className="icon-button"
+                aria-label="Hide presenter controls"
+                onClick={() => setPresenter(false)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <ol className="presenter-scenes">
+              {DEMO_SCENES.map((scene, i) => (
+                <li key={scene.id}>
+                  <button disabled={busy} onClick={() => void loadScene(scene.id)}>
+                    <span className="presenter-num">{i + 1}</span>
+                    <span>
+                      <strong>{scene.title}</strong>
+                      <small>{scene.shows}</small>
+                    </span>
+                    <kbd>Alt+{i + 1}</kbd>
+                  </button>
+                </li>
+              ))}
+            </ol>
+            <button
+              className="button outline compact full"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(SAMPLE_JOB_POSTING);
+                  setToast("Sample job posting copied. Paste it into Add a target.");
+                } catch {
+                  setToast("Could not copy. The posting is in docs/DEMO-SCRIPT.md.");
+                }
+              }}
+            >
+              <Copy size={14} /> Copy sample job posting
+            </button>
+            <p className="presenter-note">
+              Everyone here is fictional and nothing is really sent. Alt+0 hides this panel.
+            </p>
+          </aside>
+        )}
         {toast && (
           <div className="toast" role="status">
             <CheckCircle2 size={17} />
@@ -2207,24 +2307,12 @@ function TemplatePage({
   const [body, setBody] = useState(s.template.body),
     [subject, setSubject] = useState(s.template.subject || ""),
     [channel, setChannel] = useState(s.template.channel);
-  const placeholders = [
-    "first_name",
-    "my_name",
-    "my_year",
-    "my_school",
-    "my_major",
-    "company",
-    "role",
-    "their_team",
-    "personal_hook",
-    "my_availability",
-  ];
   return (
     <>
       <PageHeading
-        eyebrow="WRITE IT ONCE. MAKE IT PERSONAL."
-        title="Your voice, with a little help."
-        description="We fill the placeholders. Everything else stays the way you wrote it."
+        eyebrow="MESSAGE TEMPLATE"
+        title="Write your message once."
+        description="Type it the way you'd say it. Click a field to add details that change for each person; the rest stays exactly as you wrote it."
       />
       <div className="settings-layout">
         <form
@@ -2258,33 +2346,27 @@ function TemplatePage({
             </select>
           </label>
           {channel === "email" && (
-            <label className="field">
-              Subject
-              <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                placeholder="Coffee chat about {{company}}?"
-              />
-            </label>
-          )}
-          <label className="field">
-            Your message
-            <textarea
-              rows={12}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              required
+            <TemplateEditor
+              label="Subject"
+              singleLine
+              value={subject}
+              onChange={setSubject}
+              profile={s.profile}
+              placeholder="Coffee chat about the role?"
             />
-          </label>
-          <div className="placeholder-pills">
-            {placeholders.map((p) => (
-              <button
-                type="button"
-                key={p}
-                onClick={() => setBody((b) => b + ` {{${p}}}`)}
-              >{`{{${p}}}`}</button>
-            ))}
-          </div>
+          )}
+          <TemplateEditor
+            label="Your message"
+            value={body}
+            onChange={setBody}
+            profile={s.profile}
+            placeholder="Hi, I'm a student at…"
+          />
+          <TemplatePreview
+            subject={channel === "email" ? subject : undefined}
+            body={body}
+            profile={s.profile}
+          />
           {channel === "linkedin_connect" && (
             <p className="field-help">
               Filled connection notes must fit within 300 characters. Keep the
@@ -2301,10 +2383,11 @@ function TemplatePage({
           <span className="mini-icon">
             <WandSparkles size={21} />
           </span>
-          <h2>Personal, by design.</h2>
+          <h2>How the personal hook works</h2>
           <p>
-            Your copilot finds the strongest real connection and puts it in{" "}
-            <code>{"{{personal_hook}}"}</code>.
+            Add the <strong>Personal hook</strong> field and the AI writes one
+            line from a real connection: a shared school, a past employer, or
+            something they posted. If there’s nothing real, it’s left out.
           </p>
           <div className="template-example">
             <small>A WARM CONNECTION</small>
@@ -2326,14 +2409,107 @@ function TemplatePage({
   );
 }
 
+/** Scheduled chats that haven't happened yet, soonest first. */
+function upcomingChats(s: AppState): Meeting[] {
+  return s.meetings
+    .filter((m) => new Date(m.end).getTime() > Date.now())
+    .sort((a, b) => a.start.localeCompare(b.start));
+}
+const chatWhen = (m: Meeting) =>
+  new Date(m.start).toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+/** "Add to Leo Nguyen coffee chat" (one chat) or a picker (several). Clicking again removes it. */
+function AddToChat({
+  question: q,
+  state: s,
+  run,
+  busy,
+  onOpenChat,
+}: {
+  question: Question;
+  state: AppState;
+  run: Runner;
+  busy: boolean;
+  onOpenChat: (meetingId: string) => void;
+}) {
+  const chats = upcomingChats(s);
+  const nameFor = (m: Meeting) =>
+    s.contacts.find((c) => c.id === m.contactId)?.name || "Coffee chat";
+  const toggle = (m: Meeting) =>
+    void run({
+      type: "SET_CHAT_QUESTIONS",
+      meetingId: m.id,
+      questionIds: m.questionIds.includes(q.id)
+        ? m.questionIds.filter((id) => id !== q.id)
+        : [...m.questionIds, q.id],
+    });
+  if (!chats.length)
+    return <span className="quiet-note">No chats scheduled yet</span>;
+  if (chats.length === 1) {
+    const m = chats[0];
+    const added = m.questionIds.includes(q.id);
+    return (
+      <span className="add-to-chat">
+        <button
+          className={`button compact ${added ? "subtle" : "outline"}`}
+          disabled={busy}
+          onClick={() => toggle(m)}
+          title={added ? "Click to remove it from this chat" : undefined}
+        >
+          {added ? <Check size={14} /> : <Plus size={14} />}
+          {added ? `In ${nameFor(m)} chat` : `Add to ${nameFor(m)} coffee chat`}
+        </button>
+        {added && (
+          <button className="text-button" onClick={() => onOpenChat(m.id)}>
+            Open chat
+          </button>
+        )}
+      </span>
+    );
+  }
+  const inChats = chats.filter((m) => m.questionIds.includes(q.id));
+  return (
+    <span className="add-to-chat">
+      <select
+        aria-label={`Add "${q.text}" to a coffee chat`}
+        value=""
+        disabled={busy}
+        onChange={(e) => {
+          const m = chats.find((item) => item.id === e.target.value);
+          if (m) toggle(m);
+        }}
+      >
+        <option value="">
+          {inChats.length
+            ? `In ${inChats.map((m) => nameFor(m).split(" ")[0]).join(", ")} chat${inChats.length > 1 ? "s" : ""}`
+            : "Add to coffee chat…"}
+        </option>
+        {chats.map((m) => (
+          <option value={m.id} key={m.id}>
+            {m.questionIds.includes(q.id) ? "Remove from" : "Add to"} {nameFor(m)} coffee chat
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 function QuestionsPage({
   state: s,
   run,
   busy,
+  onOpenChat,
 }: {
   state: AppState;
   run: Runner;
   busy: boolean;
+  onOpenChat: (meetingId: string) => void;
 }) {
   const [tab, setTab] = useState<"approved" | "suggested">("approved"),
     [text, setText] = useState(""),
@@ -2371,9 +2547,9 @@ function QuestionsPage({
     <>
       <div className="heading-line">
         <PageHeading
-          eyebrow="CURIOSITY IS A SUPERPOWER"
-          title="Come with good questions."
-          description="A collection of conversation starters, chosen by you."
+          eyebrow="FOR YOUR COFFEE CHATS"
+          title="Question bank"
+          description="Questions you want to ask. Add them to a scheduled coffee chat, or let a prep brief pick from them."
         />
         <button
           className="button primary"
@@ -2382,7 +2558,7 @@ function QuestionsPage({
             if (
               await run(
                 { type: "SUGGEST_QUESTIONS", ...(forContact && { contactId: forContact }) },
-                "Fresh questions are ready to review",
+                "Suggested questions are ready to review",
               )
             )
               setTab("suggested");
@@ -2411,13 +2587,30 @@ function QuestionsPage({
           <small>Add people in My network so suggestions can be about them.</small>
         )}
       </label>
-      <div className="questions-intro">
-        <BookOpen size={23} />
-        <p>
-          Your prep briefs use questions you’ve approved. Add the ones that
-          sound like you, and skip the rest.
-        </p>
-      </div>
+      <form className="panel question-add-row" onSubmit={addQuestion}>
+        <input
+          aria-label="Write your own question"
+          placeholder="Write your own question…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={500}
+          required
+        />
+        <select
+          aria-label="Question category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value as QuestionCategory)}
+        >
+          {Object.entries(categoryLabels).map(([v, l]) => (
+            <option value={v} key={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+        <button className="button primary compact" disabled={busy || !text.trim()}>
+          <Plus size={14} /> Add question
+        </button>
+      </form>
       <div className="tabs standalone">
         <button
           className={tab === "approved" ? "active" : ""}
@@ -2429,174 +2622,457 @@ function QuestionsPage({
           className={tab === "suggested" ? "active" : ""}
           onClick={() => setTab("suggested")}
         >
-          For your consideration <span>{count("suggested")}</span>
+          Suggestions <span>{count("suggested")}</span>
         </button>
       </div>
-      <div className="questions-grid">
+      <section className="panel question-list" aria-label="Questions">
         {list.map((q) => (
-          <QuestionCard
+          <QuestionRow
             key={q.id}
             question={q}
             contactName={q.contactId ? names.get(q.contactId) : undefined}
+            state={s}
             run={run}
             busy={busy}
+            onOpenChat={onOpenChat}
           />
         ))}
         {!list.length && (
-          <div className="panel">
-            <Empty
-              icon={<BookOpen size={28} />}
-              title={
-                tab === "approved"
-                  ? "Your curiosity belongs here."
-                  : "All considered."
-              }
-            >
-              {tab === "approved"
-                ? "Add a question below or review a few suggestions."
-                : "Ask for more suggestions whenever you’re ready."}
-            </Empty>
-          </div>
+          <Empty
+            icon={<BookOpen size={28} />}
+            title={tab === "approved" ? "No questions yet." : "No suggestions waiting."}
+          >
+            {tab === "approved"
+              ? "Write one above, or click Suggest questions."
+              : "Click Suggest questions to get more."}
+          </Empty>
         )}
-        <form className="question-card write-question" onSubmit={addQuestion}>
-          <span className="eyebrow">ONE OF YOUR OWN</span>
-          <textarea
-            rows={3}
-            aria-label="Write your own question"
-            placeholder="What are you curious about?"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            required
-            maxLength={500}
-          />
-          <div className="question-bottom">
-            <select
-              aria-label="Question category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as QuestionCategory)}
-            >
-              {Object.entries(categoryLabels).map(([v, l]) => (
-                <option value={v} key={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-            <button
-              className="button primary compact"
-              disabled={busy || !text.trim()}
-            >
-              <Plus size={14} /> Add question
-            </button>
-          </div>
-        </form>
-      </div>
+      </section>
     </>
   );
 }
-function QuestionCard({
+
+function QuestionRow({
   question: q,
   contactName,
+  state: s,
   run,
   busy,
+  onOpenChat,
 }: {
   question: Question;
   contactName?: string;
+  state: AppState;
   run: Runner;
   busy: boolean;
+  onOpenChat: (meetingId: string) => void;
 }) {
   const [text, setText] = useState(q.text),
     [editing, setEditing] = useState(false);
   return (
-    <article className="question-card">
-      <div className="question-top">
-        <span className="question-tags">
-          <Badge>{categoryLabels[q.category]}</Badge>
-          {contactName && <Badge tone="green">For {contactName}</Badge>}
-        </span>
-        <span>
-          {q.source === "ai_suggested" ? (
-            <Sparkles size={14} />
-          ) : (
-            <MessageSquare size={14} />
-          )}
-        </span>
+    <div className="question-row">
+      <span className="question-row-category">
+        <Badge>{categoryLabels[q.category]}</Badge>
+        {contactName && <Badge tone="green">For {contactName.split(" ")[0]}</Badge>}
+      </span>
+      <div className="question-row-text">
+        {editing ? (
+          <input
+            aria-label="Edit question"
+            value={text}
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+          />
+        ) : (
+          <p>{q.text}</p>
+        )}
+        {q.why && !editing && <p className="question-why">{q.why}</p>}
+        <small>
+          {q.source === "ai_suggested" ? "Suggested by AI" : "Written by you"}
+          {q.timesUsed ? ` · used in ${q.timesUsed} chat${q.timesUsed === 1 ? "" : "s"}` : ""}
+          {q.landedWell ? ` · landed well ${q.landedWell}×` : ""}
+        </small>
       </div>
-      {editing ? (
-        <textarea
-          aria-label="Edit question"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={3}
-        />
-      ) : (
-        <h3>{q.text}</h3>
-      )}
-      {q.why && !editing && <p className="question-why">{q.why}</p>}
-      <div className="question-bottom">
+      <div className="question-row-actions">
         {q.status === "suggested" ? (
           <>
             <button
               className="text-button muted"
               disabled={busy}
               onClick={() =>
-                void run({
-                  type: "UPDATE_QUESTION",
-                  question: { ...q, status: "skipped" },
-                })
+                void run({ type: "UPDATE_QUESTION", question: { ...q, status: "skipped" } })
               }
             >
-              Skip <X size={13} />
+              Skip
             </button>
-            <div className="inline-actions">
-              <button
-                className="text-button"
-                onClick={() => setEditing((v) => !v)}
-              >
-                Edit
-              </button>
-              <button
-                className="button primary compact"
-                disabled={busy || !text.trim()}
-                onClick={() =>
-                  void run(
-                    {
-                      type: "UPDATE_QUESTION",
-                      question: { ...q, text, status: "approved" },
-                    },
-                    "Added to your bank",
-                  )
-                }
-              >
-                <Plus size={14} /> Add to bank
-              </button>
-            </div>
+            <button className="text-button" onClick={() => setEditing((v) => !v)}>
+              {editing ? "Done" : "Edit"}
+            </button>
+            <button
+              className="button primary compact"
+              disabled={busy || !text.trim()}
+              onClick={() =>
+                void run(
+                  { type: "UPDATE_QUESTION", question: { ...q, text, status: "approved" } },
+                  "Added to your bank",
+                )
+              }
+            >
+              <Plus size={14} /> Add to bank
+            </button>
           </>
         ) : (
           <>
-            <span className="quiet-note">
-              <CheckCircle2 size={13} />
-              {q.timesUsed
-                ? `Used in ${q.timesUsed} brief${q.timesUsed === 1 ? "" : "s"}`
-                : "Ready for your next chat"}
-            </span>
             <button
               className="text-button"
               disabled={busy || !text.trim()}
               onClick={async () => {
                 if (editing)
-                  await run(
-                    { type: "UPDATE_QUESTION", question: { ...q, text } },
-                    "Question updated",
-                  );
+                  await run({ type: "UPDATE_QUESTION", question: { ...q, text } }, "Question updated");
                 setEditing((v) => !v);
               }}
             >
               {editing ? "Save" : "Edit"}
             </button>
+            <AddToChat question={q} state={s} run={run} busy={busy} onOpenChat={onOpenChat} />
           </>
         )}
       </div>
-    </article>
+    </div>
+  );
+}
+
+/** All scheduled coffee chats; open one to pick questions and see everything about the person. */
+function ChatsPage({
+  state: s,
+  run,
+  busy,
+  chatId,
+  onChat,
+  onContact,
+}: {
+  state: AppState;
+  run: Runner;
+  busy: boolean;
+  chatId: string | null;
+  onChat: (id: string) => void;
+  onContact: (contactId: string) => void;
+}) {
+  const upcoming = upcomingChats(s);
+  const past = s.meetings
+    .filter((m) => !upcoming.includes(m))
+    .sort((a, b) => b.start.localeCompare(a.start));
+  const chat = s.meetings.find((m) => m.id === chatId) || upcoming[0] || past[0];
+  const row = (m: Meeting) => {
+    const c = s.contacts.find((item) => item.id === m.contactId);
+    return (
+      <button
+        key={m.id}
+        className={`chat-row ${chat?.id === m.id ? "active" : ""}`}
+        onClick={() => onChat(m.id)}
+      >
+        <Avatar name={c?.name || "Coffee chat"} small />
+        <span>
+          <strong>{c?.name || "Coffee chat"}</strong>
+          <small>{chatWhen(m)}</small>
+        </span>
+        <span className="chat-row-count" title="Questions added">
+          {m.questionIds.length} <BookOpen size={12} />
+        </span>
+      </button>
+    );
+  };
+  return (
+    <>
+      <PageHeading
+        eyebrow="SCHEDULED"
+        title="Coffee chats"
+        description="Open a chat to choose your questions and see everything you have on the person."
+      />
+      {!s.meetings.length ? (
+        <div className="panel">
+          <Empty icon={<CalendarDays size={28} />} title="No coffee chats yet.">
+            Once someone agrees to a time, the chat shows up here.
+          </Empty>
+        </div>
+      ) : (
+        <div className="chats-layout">
+          <nav className="panel chats-list" aria-label="Coffee chats">
+            <div className="chats-list-heading">Upcoming</div>
+            {upcoming.map(row)}
+            {!upcoming.length && <p className="muted">Nothing upcoming.</p>}
+            {past.length > 0 && (
+              <>
+                <div className="chats-list-heading">Past</div>
+                {past.map(row)}
+              </>
+            )}
+          </nav>
+          {chat && (
+            <ChatDetail
+              key={chat.id}
+              meeting={chat}
+              state={s}
+              run={run}
+              busy={busy}
+              onContact={onContact}
+            />
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ChatDetail({
+  meeting: m,
+  state: s,
+  run,
+  busy,
+  onContact,
+}: {
+  meeting: Meeting;
+  state: AppState;
+  run: Runner;
+  busy: boolean;
+  onContact: (contactId: string) => void;
+}) {
+  const [filter, setFilter] = useState<QuestionCategory | "all">("all");
+  const c = s.contacts.find((item) => item.id === m.contactId);
+  const target = c && s.targets.find((t) => t.id === c.targetId);
+  const chosen = m.questionIds
+    .map((id) => s.questions.find((q) => q.id === id))
+    .filter((q): q is Question => !!q);
+  const bank = s.questions.filter(
+    (q) =>
+      q.status === "approved" &&
+      !m.questionIds.includes(q.id) &&
+      (filter === "all" || q.category === filter),
+  );
+  const setQuestions = (ids: string[]) =>
+    void run({ type: "SET_CHAT_QUESTIONS", meetingId: m.id, questionIds: ids });
+  const history = s.activities
+    .filter((e) => e.contactId === m.contactId)
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 6);
+  const sent = s.drafts.filter((d) => d.contactId === m.contactId && d.status === "sent");
+  const first = c?.name.split(" ")[0] || "them";
+  return (
+    <section className="panel chat-detail">
+      <div className="chat-detail-header">
+        <Avatar name={c?.name || "Coffee chat"} />
+        <div>
+          <h2>{c?.name || "Coffee chat"}</h2>
+          <p>
+            {c?.title}
+            {c?.company ? ` · ${c.company}` : ""}
+          </p>
+          <p className="chat-when">
+            <CalendarDays size={14} /> {chatWhen(m)}
+            {m.meetLink && (
+              <>
+                {" · "}
+                <a href={m.meetLink} target="_blank" rel="noreferrer">
+                  Join Google Meet <ExternalLink size={12} />
+                </a>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="chat-detail-actions">
+          {c && (
+            <button className="button outline compact" onClick={() => onContact(c.id)}>
+              Full profile
+            </button>
+          )}
+          {c && (
+            <button
+              className="button primary compact"
+              disabled={busy}
+              onClick={() =>
+                void run({ type: "GENERATE_PREP_BRIEF", contactId: c.id }, "Prep brief ready")
+              }
+            >
+              <Sparkles size={14} /> {m.prepBrief ? "Redo prep brief" : "Make prep brief"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="chat-detail-grid">
+        <div>
+          <h3>
+            Questions for this chat <span>{chosen.length}</span>
+          </h3>
+          {chosen.length ? (
+            <ol className="chat-questions">
+              {chosen.map((q) => (
+                <li key={q.id}>
+                  <span>{q.text}</span>
+                  <button
+                    className="icon-button"
+                    title="Remove from this chat"
+                    aria-label={`Remove "${q.text}" from this chat`}
+                    disabled={busy}
+                    onClick={() => setQuestions(m.questionIds.filter((id) => id !== q.id))}
+                  >
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="muted">No questions yet. Add some from your bank below.</p>
+          )}
+
+          <h3 className="chat-bank-heading">
+            Your question bank
+            <select
+              aria-label="Filter by category"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as QuestionCategory | "all")}
+            >
+              <option value="all">All categories</option>
+              {Object.entries(categoryLabels).map(([v, l]) => (
+                <option value={v} key={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </h3>
+          <ul className="chat-bank">
+            {bank.map((q) => (
+              <li key={q.id}>
+                <Badge>{categoryLabels[q.category]}</Badge>
+                <span>{q.text}</span>
+                <button
+                  className="button outline compact"
+                  disabled={busy}
+                  onClick={() => setQuestions([...m.questionIds, q.id])}
+                >
+                  <Plus size={13} /> Add
+                </button>
+              </li>
+            ))}
+            {!bank.length && (
+              <li className="muted">Everything here is already in this chat.</li>
+            )}
+          </ul>
+        </div>
+
+        <aside className="chat-about">
+          <h3>About {first}</h3>
+          <dl>
+            {c?.title && (
+              <>
+                <dt>Role</dt>
+                <dd>
+                  {c.title} at {c.company}
+                </dd>
+              </>
+            )}
+            {target && (
+              <>
+                <dt>Your target job</dt>
+                <dd>
+                  {target.role} at {target.company}
+                </dd>
+              </>
+            )}
+            {c?.email && (
+              <>
+                <dt>Email</dt>
+                <dd>
+                  {c.email}{" "}
+                  <Badge tone={c.emailVerified ? "green" : "amber"}>
+                    {c.emailVerified
+                      ? "Confirmed"
+                      : `${Math.round((c.emailConfidence || 0) * 100)}% guess`}
+                  </Badge>
+                </dd>
+              </>
+            )}
+            {c?.linkedinUrl && (
+              <>
+                <dt>LinkedIn</dt>
+                <dd>
+                  <a href={c.linkedinUrl} target="_blank" rel="noreferrer">
+                    Profile <ExternalLink size={12} />
+                  </a>
+                </dd>
+              </>
+            )}
+            {c?.xHandle && (
+              <>
+                <dt>X</dt>
+                <dd>
+                  <a href={c.xUrl} target="_blank" rel="noreferrer">
+                    @{c.xHandle} <ExternalLink size={12} />
+                  </a>
+                  {c.xPost && <blockquote>“{c.xPost.excerpt}”</blockquote>}
+                </dd>
+              </>
+            )}
+            {c?.warmPaths.length ? (
+              <>
+                <dt>What you share</dt>
+                <dd>{c.warmPaths.map((w) => w.detail).join(" · ")}</dd>
+              </>
+            ) : null}
+            {c?.reason && (
+              <>
+                <dt>Why them</dt>
+                <dd>{c.reason}</dd>
+              </>
+            )}
+            {c?.connectionDegree && (
+              <>
+                <dt>Connection</dt>
+                <dd>
+                  {c.connectionDegree === 1 ? "1st" : c.connectionDegree === 2 ? "2nd" : "3rd"}
+                  -degree on LinkedIn
+                </dd>
+              </>
+            )}
+            {c?.notes && (
+              <>
+                <dt>Your notes</dt>
+                <dd>{c.notes}</dd>
+              </>
+            )}
+          </dl>
+          {sent.length > 0 && (
+            <>
+              <h4>Messages you sent ({sent.length})</h4>
+              {sent.slice(-2).map((d) => (
+                <p className="chat-sent" key={d.id}>
+                  {d.body.slice(0, 220)}
+                  {d.body.length > 220 ? "…" : ""}
+                </p>
+              ))}
+            </>
+          )}
+          {history.length > 0 && (
+            <>
+              <h4>Recent activity</h4>
+              <ul className="chat-history">
+                {history.map((e) => (
+                  <li key={e.id}>
+                    {e.summary} <small>{new Date(e.at).toLocaleDateString()}</small>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {m.prepBrief && (
+            <details className="chat-brief">
+              <summary>Prep brief</summary>
+              <pre>{m.prepBrief}</pre>
+            </details>
+          )}
+        </aside>
+      </div>
+    </section>
   );
 }
 
@@ -2626,9 +3102,9 @@ function SettingsPage({
   return (
     <>
       <PageHeading
-        eyebrow="LET’S MAKE THE INTRODUCTION"
-        title="Start with your story."
-        description="A little context helps your outreach feel a lot more like you."
+        eyebrow="YOUR PROFILE"
+        title="Settings & profile"
+        description="Your school, year, major, and background get filled into every message."
       />
       <div className="settings-layout">
         <form
@@ -2843,7 +3319,7 @@ function SettingsPage({
               </button>
             </div>
             <p className="field-help">
-              Demo and live data are kept in separate workspaces.
+              Demo and live data are kept separate.
             </p>
             <div className="limits-line">
               <ShieldCheck size={16} />
@@ -2859,10 +3335,10 @@ function SettingsPage({
                 className="text-button muted"
                 disabled={busy}
                 onClick={() =>
-                  void run({ type: "RESET_DEMO" }, "Demo workspace reset")
+                  void run({ type: "RESET_DEMO" }, "Demo data reset")
                 }
               >
-                Reset demo workspace <RefreshCw size={13} />
+                Reset demo data <RefreshCw size={13} />
               </button>
             )}
           </section>
@@ -3099,7 +3575,7 @@ function ContactDetail({
                 <WandSparkles size={15} /> Draft outreach
               </button>
               <button className="button outline" onClick={onQueue}>
-                View approval queue <ArrowRight size={14} />
+                View message approval queue <ArrowRight size={14} />
               </button>
             </div>
             {s.settings.demoMode && (

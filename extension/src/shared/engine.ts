@@ -12,13 +12,14 @@ import type {
   Target,
 } from "./types";
 import { getState, saveState, switchMode } from "./storage";
-import { createDemoState } from "./mock";
-import { aiRequest } from "./ai";
+import { createDemoState, demoXContacts } from "./mock";
+import { aiRequest, demoResponse } from "./ai";
 import { connectGoogle } from "../google/auth";
 import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
 import { scrapeSearch, fillLinkedIn } from "../content/index";
 import { discoverOnX } from "./x";
+import { buildDemoScene, DEMO_SCENES } from "./demoScenes";
 
 const DAY = 86_400_000;
 const OPT_OUT = "If you'd prefer no follow-ups, just let me know.";
@@ -88,51 +89,6 @@ function resetUsage(state: AppState, now: number): void {
   if (state.usage.date !== today(now))
     state.usage = { date: today(now), emails: 0, profiles: 0 };
 }
-/** Fictional people for demo mode's "Find people on X". No X search runs. */
-function demoXContacts(target: Target): Contact[] {
-  const people = [
-    {
-      handle: "devon_builds_demo",
-      name: "Devon Reyes",
-      title: `Engineer at ${target.company} (per their X bio)`,
-      reason: `Posts about the systems behind ${target.team || target.role} and answers student questions.`,
-      post: "Hot take: the best intern projects are the boring reliability ones. You learn the whole stack.",
-      relevance: 88,
-    },
-    {
-      handle: "priya_recruits_demo",
-      name: "Priya Shah",
-      title: `University recruiting at ${target.company} (per their X bio)`,
-      reason: `Shared that ${target.company} is hiring early-career ${target.role} candidates this season.`,
-      post: "Early-career apps are open! Tip: a short note about a real project beats a perfect cover letter.",
-      relevance: 81,
-    },
-    {
-      handle: "sam_ships_demo",
-      name: "Sam Okafor",
-      title: `Former ${target.company} engineer (per their X posts)`,
-      reason: "Writes threads about breaking into the industry from a non-target background.",
-      post: "Thread: 5 things I wish I knew before my first engineering internship.",
-      relevance: 70,
-    },
-  ];
-  return people.map((p) => ({
-    id: id("demo_contact"),
-    targetId: target.id,
-    name: p.name,
-    title: p.title,
-    company: target.company,
-    xHandle: p.handle,
-    xUrl: `https://x.com/${p.handle}`,
-    xPost: { url: `https://x.com/${p.handle}`, excerpt: p.post },
-    warmPaths: [],
-    relevance: p.relevance,
-    reason: p.reason,
-    stage: "found" as const,
-    followUpCount: 0,
-  }));
-}
-
 function isDemoContact(contact: Contact): boolean {
   return (
     contact.id.startsWith("demo_") ||
@@ -459,7 +415,7 @@ export async function applyAction(
     const allowed = new Map(
       available.map((question) => [question.id, question]),
     );
-    const picked = brief.picked
+    let picked = brief.picked
       .filter((item) => allowed.has(item.questionId))
       .filter(
         (item, index, all) =>
@@ -474,6 +430,19 @@ export async function applyAction(
         !picked.some((item) => item.questionId === question.id)
       )
         picked.push({ questionId: question.id, tailoredText: question.text });
+    // Questions you added to this chat by hand always stay, first; the AI fills the rest up to 5.
+    const approvedById = new Map(approved.map((question) => [question.id, question]));
+    const handPicked = (meeting?.questionIds || []).filter((qid) => approvedById.has(qid));
+    picked = [
+      ...handPicked.map(
+        (qid) =>
+          picked.find((item) => item.questionId === qid) || {
+            questionId: qid,
+            tailoredText: approvedById.get(qid)!.text,
+          },
+      ),
+      ...picked.filter((item) => !handPicked.includes(item.questionId)),
+    ].slice(0, Math.max(5, handPicked.length));
     const additions =
       picked.length < 5
         ? (brief.newQuestions || []).slice(0, 5 - picked.length)
@@ -510,7 +479,7 @@ export async function applyAction(
         await services.updateMeetingDescription(meeting.calendarEventId, text);
       for (const pickedQuestion of picked)
         if (!meeting.questionIds.includes(pickedQuestion.questionId))
-          allowed.get(pickedQuestion.questionId)!.timesUsed++;
+          approvedById.get(pickedQuestion.questionId)!.timesUsed++;
       meeting.prepBrief = text;
       meeting.questionIds = picked.map((item) => item.questionId);
     }
@@ -598,13 +567,29 @@ export async function applyAction(
     case "PARSE_JOB": {
       if (action.rawDescription.trim().length < 30)
         throw new Error("Paste a job description with at least 30 characters.");
-      const parsed = await ai<Omit<Target, "id" | "rawDescription">>(
-        "/ai/parse-job",
-        { rawDescription: action.rawDescription },
-      );
-      if (!parsed.company?.trim() || !parsed.role?.trim())
+      // Adding a job shouldn't depend on AI: if Grok is unavailable (no key, server down),
+      // fall back to the simple text reader demo mode uses, and say so.
+      let parsed: Omit<Target, "id" | "rawDescription">;
+      let aiUnavailable = "";
+      try {
+        parsed = await ai<Omit<Target, "id" | "rawDescription">>(
+          "/ai/parse-job",
+          { rawDescription: action.rawDescription },
+        );
+      } catch (error) {
+        if (state.settings.demoMode) throw error;
+        aiUnavailable = error instanceof Error ? error.message : "AI unavailable";
+        parsed = demoResponse("parse-job", {
+          rawDescription: action.rawDescription,
+        }) as Omit<Target, "id" | "rawDescription">;
+      }
+      const missing = (value?: string) =>
+        !value?.trim() || value.trim() === "Not specified";
+      if (missing(parsed.company) || missing(parsed.role))
         throw new Error(
-          "The job needs a company and role. Add them to the description and try again.",
+          aiUnavailable
+            ? `AI isn't connected (${aiUnavailable}) Add "Company: …" and "Role: …" lines to the description and try again.`
+            : "The job needs a company and role. Add them to the description and try again.",
         );
       const target: Target = {
         ...parsed,
@@ -616,7 +601,9 @@ export async function applyAction(
       };
       state.targets.push(target);
       data = target;
-      message = `${target.company} target added.`;
+      message = aiUnavailable
+        ? `${target.company} target added with basic text reading because AI isn't connected. Check the company, role, and skills.`
+        : `${target.company} target added.`;
       break;
     }
     case "GENERATE_SEARCH_PLAN": {
@@ -1286,6 +1273,23 @@ export async function applyAction(
           : "Question updated.";
       break;
     }
+    case "SET_CHAT_QUESTIONS": {
+      const meeting = state.meetings.find((item) => item.id === action.meetingId);
+      if (!meeting) throw new Error("Coffee chat not found.");
+      const approvedIds = new Set(
+        state.questions.filter((item) => item.status === "approved").map((item) => item.id),
+      );
+      const ids = [...new Set(action.questionIds)];
+      if (ids.some((qid) => !approvedIds.has(qid)))
+        throw new Error("Only questions in your bank can be added to a coffee chat.");
+      const added = ids.filter((qid) => !meeting.questionIds.includes(qid)).length;
+      meeting.questionIds = ids;
+      const name = state.contacts.find((item) => item.id === meeting.contactId)?.name || "this person";
+      message = added
+        ? `Added to your coffee chat with ${name}.`
+        : `Removed from your coffee chat with ${name}.`;
+      break;
+    }
     case "GENERATE_PREP_BRIEF":
       data = await generatePrep(requireContact(state, action.contactId));
       message = "Prep brief ready, using your approved question bank first.";
@@ -1458,6 +1462,15 @@ export async function applyAction(
         message = `Google connected${account.email ? ` as ${account.email}` : ""}.`;
       }
       break;
+    case "LOAD_DEMO_SCENE": {
+      if (!state.settings.demoMode)
+        throw new Error("Presentation scenes only work in Demo mode. Your live data was not touched.");
+      // Built by replaying real actions, so every scene is what the app itself would produce.
+      state = await buildDemoScene(action.scene, now, (s, a) => applyAction(s, a, services));
+      const scene = DEMO_SCENES.find((item) => item.id === action.scene);
+      message = `Scene loaded: ${scene?.title}. All people and sends are fictional.`;
+      break;
+    }
     case "RESET_DEMO":
       if (!state.settings.demoMode)
         throw new Error(

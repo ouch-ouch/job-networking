@@ -17,6 +17,7 @@ type DemoInput = {
   rawDescription?: string;
   originalDraft?: { subject?: string; body: string };
   replyText?: string;
+  proposedTimes?: string[];
   availability?: string;
   approvedBank?: Question[];
   existingBank?: Question[];
@@ -101,6 +102,17 @@ const fallbackQuestions = [
     category: "advice",
   },
 ] as const;
+
+/** Demo only: pull a stated time like "Thursday at 3pm ET" out of a reply. */
+function demoProposedTime(reply: string): string | undefined {
+  const m = reply.match(
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)\b[^.?!\n]{0,15}?\b(\d{1,2}(?::\d{2})?\s*[ap]m)(\s*(?:ET|EST|EDT|PT|PST|PDT|CT|CST|CDT)\b)?/i,
+  );
+  if (!m) return undefined;
+  const day = m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+  const zone = m[3] ? ` ${m[3].trim().toUpperCase()}` : "";
+  return `${day} at ${m[2].replace(/\s+/g, "").toLowerCase()}${zone}`;
+}
 
 // Explicit sandbox mode: deterministic illustrations only, with no API calls.
 export function demoResponse(endpoint: string, payload: unknown): unknown {
@@ -280,12 +292,19 @@ export function demoResponse(endpoint: string, payload: unknown): unknown {
                   )
                 ? "proposes_time"
                 : "interested";
-      return { intent, proposedTimes: [] };
+      const proposed = demoProposedTime(reply);
+      return { intent, proposedTimes: proposed ? [proposed] : [] };
     }
-    case "schedule-reply":
+    case "schedule-reply": {
+      // Demo only: echo a time they actually wrote; otherwise ask for one.
+      const proposed =
+        data.proposedTimes?.[0] || demoProposedTime(data.replyText || "");
       return {
-        body: `Hi ${name},\n\nThanks for getting back to me! My availability is ${data.availability || "flexible this week"}. Would a 15-minute chat during that window work for you? Please confirm a date, time, and time zone.\n\nThanks!`,
+        body: proposed
+          ? `Hi ${name},\n\nThank you so much! ${proposed} works great for me. I'll send a calendar invite with a Google Meet link.\n\nLooking forward to it,`
+          : `Hi ${name},\n\nThanks for getting back to me! My availability is ${data.availability || "flexible this week"}. Would a 15-minute chat during that window work for you? Please confirm a date, time, and time zone.\n\nThanks!`,
       };
+    }
     case "suggest-questions": {
       const existing = new Set(
         (data.existingBank || []).map((q) => q.text.toLowerCase().trim()),

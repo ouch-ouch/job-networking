@@ -1112,3 +1112,100 @@ test("demo import metadata describes fictional examples and does not read a page
   assert.equal(calls.linkedin, 0);
   assert.equal(calls.calendar, 0);
 });
+
+test("coffee chat questions: only bank questions can be added, and prep briefs keep your picks first", async () => {
+  const { services } = harness();
+  let state = createDemoState();
+  const meeting = state.meetings[0];
+  const approved = state.questions.filter((q) => q.status === "approved");
+  const suggested = state.questions.find((q) => q.status !== "approved");
+  assert.ok(approved.length >= 2 && suggested);
+  await assert.rejects(
+    applyAction(state, { type: "SET_CHAT_QUESTIONS", meetingId: meeting.id, questionIds: [suggested!.id] }, services),
+    /Only questions in your bank/,
+  );
+  const mine = approved[approved.length - 1].id;
+  let result = await applyAction(
+    state,
+    { type: "SET_CHAT_QUESTIONS", meetingId: meeting.id, questionIds: [mine, mine] },
+    services,
+  );
+  assert.match(result.message || "", /Added to your coffee chat with/);
+  state = result.state;
+  assert.deepEqual(state.meetings[0].questionIds, [mine], "duplicates are dropped");
+
+  state = (await applyAction(state, { type: "GENERATE_PREP_BRIEF", contactId: meeting.contactId }, services)).state;
+  const ids = state.meetings[0].questionIds;
+  assert.equal(ids[0], mine, "your hand-picked question stays first");
+  assert.ok(ids.length <= 5 && ids.length >= 1);
+  assert.ok(ids.every((qid) => approved.some((q) => q.id === qid)), "only approved questions");
+
+  result = await applyAction(state, { type: "SET_CHAT_QUESTIONS", meetingId: meeting.id, questionIds: [] }, services);
+  assert.match(result.message || "", /Removed from your coffee chat/);
+  assert.deepEqual(result.state.meetings[0].questionIds, []);
+});
+
+test("presentation scenes build from real actions, in order, and never run in live mode", async () => {
+  const { aiRequest } = await import("../extension/src/shared/ai");
+  const { services, calls } = harness();
+  services.aiRequest = aiRequest; // the app's own demo AI: deterministic, no network
+  const base = createDemoState();
+  const load = async (scene: "start" | "people" | "reply" | "chat" | "after") =>
+    (await applyAction(base, { type: "LOAD_DEMO_SCENE", scene }, services)).state;
+
+  const start = await load("start");
+  assert.equal(start.targets.length + start.contacts.length + start.meetings.length, 0);
+  assert.ok(start.questions.some((q) => q.status === "approved"), "question bank is ready");
+  assert.ok(start.profile.name && start.template.body, "profile and template are ready");
+
+  const people = await load("people");
+  assert.equal(people.contacts.filter((c) => c.xHandle).length, 3);
+  assert.ok(people.drafts.some((d) => d.channel === "x" && d.status === "pending"), "an X draft waits for approval");
+
+  const reply = await load("reply");
+  const maya = (s: AppState) => s.contacts.find((c) => c.id === "demo_maya")!;
+  assert.equal(maya(reply).stage, "replied");
+  assert.ok(reply.drafts.some((d) => d.contactId === "demo_maya" && d.kind === "schedule_reply" && d.status === "pending"));
+
+  const chat = await load("chat");
+  assert.equal(maya(chat).stage, "scheduled");
+  const meeting = chat.meetings.find((m) => m.contactId === "demo_maya")!;
+  assert.deepEqual(meeting.questionIds.slice(0, 3), ["demo_q1", "demo_q2", "demo_q3"]);
+  assert.ok(meeting.prepBrief, "prep brief is ready");
+  assert.ok(Date.parse(meeting.start) > Date.now());
+
+  const after = await load("after");
+  const ended = after.meetings.find((m) => m.contactId === "demo_maya")!;
+  assert.ok(Date.parse(ended.end) < Date.now());
+  assert.equal(maya(after).stage, "met");
+
+  assert.equal(calls.emails + calls.linkedin + calls.calendar, 0, "no live integration was called");
+  const live = createDemoState();
+  live.settings.demoMode = false;
+  await assert.rejects(
+    applyAction(live, { type: "LOAD_DEMO_SCENE", scene: "chat" }, services),
+    /only work in Demo mode/,
+  );
+});
+
+test("adding a job still works in live mode when AI is unavailable, and says so", async () => {
+  const { services } = harness();
+  services.aiRequest = async () => {
+    throw new Error("Grok (xAI) API key is not configured.");
+  };
+  const state = createDemoState();
+  state.settings.demoMode = false;
+  const result = await applyAction(
+    state,
+    { type: "PARSE_JOB", rawDescription: "Company: Ramp\nRole: Software Engineer Intern\nBuild finance tools in TypeScript." },
+    services,
+  );
+  const added = result.state.targets.at(-1)!;
+  assert.equal(added.company, "Ramp");
+  assert.equal(added.role, "Software Engineer Intern");
+  assert.match(result.message || "", /basic text reading because AI isn't connected/);
+  await assert.rejects(
+    applyAction(state, { type: "PARSE_JOB", rawDescription: "We are hiring someone great to join our growing team soon." }, services),
+    /AI isn't connected .* Add "Company: …" and "Role: …" lines/,
+  );
+});

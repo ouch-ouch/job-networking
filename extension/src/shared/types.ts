@@ -159,6 +159,8 @@ export type PeopleSearchPlan = {
     connectionType: "alumni" | "shared_background" | "team" | "recruiting" | "company";
   }>;
 };
+/** Presentation scenes for demo mode (see shared/demoScenes.ts). */
+export type DemoSceneId = "start" | "people" | "reply" | "chat" | "after";
 export type ReplyIntent =
   "interested" | "proposes_time" | "not_interested" | "referral" | "ooo";
 export type Action =
@@ -201,6 +203,7 @@ export type Action =
   | { type: "SUGGEST_QUESTIONS"; contactId?: string }
   | { type: "UPDATE_QUESTION"; question: Question }
   | { type: "GENERATE_PREP_BRIEF"; contactId: string }
+  | { type: "SET_CHAT_QUESTIONS"; meetingId: string; questionIds: string[] }
   | {
       type: "SAVE_MEETING_NOTES";
       contactId: string;
@@ -209,7 +212,8 @@ export type Action =
     }
   | { type: "RUN_SCHEDULER"; now?: number }
   | { type: "CONNECT_GOOGLE" }
-  | { type: "RESET_DEMO" };
+  | { type: "RESET_DEMO" }
+  | { type: "LOAD_DEMO_SCENE"; scene: DemoSceneId };
 export type ActionResult = {
   state: AppState;
   message?: string;
