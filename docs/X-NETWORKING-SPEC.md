@@ -351,7 +351,7 @@ Secondary: useful recommendations saved, draft-to-user-marked-sent conversion, r
 | Julia | Job-portal recognition, posting extraction, navigation changes, capture fallback |
 | Rachel | Extension core, shared contracts, state, routing, end-to-end integration |
 | Sushant | Side-panel UI, resume/profile review, draft review, relationship and coffee-chat screens |
-| Maryam | Grok backend, X person discovery, public conversational research, individual writing |
+| Maryam | Grok backend, X person discovery, public conversational research, individual writing ([detail](GROK-BACKEND-SPEC.md)) |
 
 See [the four-person build plan](TEAM-PLAN.md) for feature checklists, handoffs, demo scope, acceptance checks, and a proposed three-hour schedule. The personal X/Grok spec takes precedence over the separate hackathon proposal’s template/LinkedIn workflow.
 

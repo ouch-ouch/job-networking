@@ -58,6 +58,7 @@ The demo must show that two different people get different, evidence-grounded ap
 - Return why this approach, facts/sources used, and warnings; validate schemas and references in code.
 - Enforce request bounds, cancellation/timeout handling, and configured usage limits. Deploy the backend and share its URL with Rachel.
 - **Done:** two people with different public conversational styles receive distinct grounded drafts, and sparse evidence falls back to a neutral voice.
+- **Detailed spec:** [Grok backend specification](GROK-BACKEND-SPEC.md). It covers endpoints and schemas, the discovery/research/drafting pipelines, citation-based source validation, bounds and budget, fixture mode, tests, and deployment.
 
 ## Agree on contracts in the first 20 minutes
 
