@@ -199,6 +199,7 @@ export type Action =
   | { type: "SUGGEST_QUESTIONS" }
   | { type: "UPDATE_QUESTION"; question: Question }
   | { type: "GENERATE_PREP_BRIEF"; contactId: string }
+  | { type: "SET_CHAT_QUESTIONS"; meetingId: string; questionIds: string[] }
   | {
       type: "SAVE_MEETING_NOTES";
       contactId: string;

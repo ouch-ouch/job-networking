@@ -1038,3 +1038,35 @@ test("X: live discovery goes through the backend service and skips people alread
   assert.match(second.message || "", /already on this target/);
   assert.equal(asked, 2);
 });
+
+test("coffee chat questions: only bank questions can be added, and prep briefs keep your picks first", async () => {
+  const { services } = harness();
+  let state = createDemoState();
+  const meeting = state.meetings[0];
+  const approved = state.questions.filter((q) => q.status === "approved");
+  const suggested = state.questions.find((q) => q.status !== "approved");
+  assert.ok(approved.length >= 2 && suggested);
+  await assert.rejects(
+    applyAction(state, { type: "SET_CHAT_QUESTIONS", meetingId: meeting.id, questionIds: [suggested!.id] }, services),
+    /Only questions in your bank/,
+  );
+  const mine = approved[approved.length - 1].id;
+  let result = await applyAction(
+    state,
+    { type: "SET_CHAT_QUESTIONS", meetingId: meeting.id, questionIds: [mine, mine] },
+    services,
+  );
+  assert.match(result.message || "", /Added to your coffee chat with/);
+  state = result.state;
+  assert.deepEqual(state.meetings[0].questionIds, [mine], "duplicates are dropped");
+
+  state = (await applyAction(state, { type: "GENERATE_PREP_BRIEF", contactId: meeting.contactId }, services)).state;
+  const ids = state.meetings[0].questionIds;
+  assert.equal(ids[0], mine, "your hand-picked question stays first");
+  assert.ok(ids.length <= 5 && ids.length >= 1);
+  assert.ok(ids.every((qid) => approved.some((q) => q.id === qid)), "only approved questions");
+
+  result = await applyAction(state, { type: "SET_CHAT_QUESTIONS", meetingId: meeting.id, questionIds: [] }, services);
+  assert.match(result.message || "", /Removed from your coffee chat/);
+  assert.deepEqual(result.state.meetings[0].questionIds, []);
+});

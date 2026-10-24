@@ -51,6 +51,7 @@ import type {
   AppState,
   Contact,
   Draft,
+  Meeting,
   PeopleSearchPlan,
   Profile,
   Question,
@@ -70,7 +71,13 @@ import { grabJobPage } from "../content";
 const DialogErrorContext = createContext<string | null>(null);
 
 type Page =
-  "network" | "approvals" | "questions" | "activity" | "template" | "settings";
+  | "network"
+  | "approvals"
+  | "chats"
+  | "questions"
+  | "activity"
+  | "template"
+  | "settings";
 type Modal = "target" | "contact" | "source" | null;
 const stageLabels: Record<Stage, string> = {
   found: "Found",
@@ -248,6 +255,11 @@ export default function App() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<string | null>(null);
+  const [chatId, setChatId] = useState<string | null>(null);
+  const openChat = (meetingId: string) => {
+    setChatId(meetingId);
+    setPage("chats");
+  };
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [queueTab, setQueueTab] = useState("pending");
@@ -357,12 +369,19 @@ export default function App() {
       icon: <Inbox size={19} />,
       count: pending.length,
     },
+    {
+      id: "chats",
+      label: "Coffee chats",
+      icon: <CalendarDays size={19} />,
+      count: upcomingChats(s).length,
+    },
     { id: "questions", label: "Question bank", icon: <BookOpen size={19} /> },
     { id: "activity", label: "Activity", icon: <Clock3 size={19} /> },
   ];
   const labels: Record<Page, string> = {
     network: "My network",
     approvals: "Message approval queue",
+    chats: "Coffee chats",
     questions: "Question bank",
     activity: "Activity",
     template: "Your template",
@@ -961,8 +980,18 @@ export default function App() {
                 )}
               </>
             )}
+            {page === "chats" && (
+              <ChatsPage
+                state={s}
+                run={run}
+                busy={busy}
+                chatId={chatId}
+                onChat={setChatId}
+                onContact={setSelected}
+              />
+            )}
             {page === "questions" && (
-              <QuestionsPage state={s} run={run} busy={busy} />
+              <QuestionsPage state={s} run={run} busy={busy} onOpenChat={openChat} />
             )}
             {page === "activity" && (
               <>
@@ -1081,7 +1110,7 @@ export default function App() {
                         <button
                           className="meeting-card"
                           key={m.id}
-                          onClick={() => setSelected(m.contactId)}
+                          onClick={() => openChat(m.id)}
                         >
                           <div className="meeting-date">
                             <strong>{new Date(m.start).getDate()}</strong>
@@ -2202,14 +2231,107 @@ function TemplatePage({
   );
 }
 
+/** Scheduled chats that haven't happened yet, soonest first. */
+function upcomingChats(s: AppState): Meeting[] {
+  return s.meetings
+    .filter((m) => new Date(m.end).getTime() > Date.now())
+    .sort((a, b) => a.start.localeCompare(b.start));
+}
+const chatWhen = (m: Meeting) =>
+  new Date(m.start).toLocaleString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+/** "Add to Leo Nguyen coffee chat" (one chat) or a picker (several). Clicking again removes it. */
+function AddToChat({
+  question: q,
+  state: s,
+  run,
+  busy,
+  onOpenChat,
+}: {
+  question: Question;
+  state: AppState;
+  run: Runner;
+  busy: boolean;
+  onOpenChat: (meetingId: string) => void;
+}) {
+  const chats = upcomingChats(s);
+  const nameFor = (m: Meeting) =>
+    s.contacts.find((c) => c.id === m.contactId)?.name || "Coffee chat";
+  const toggle = (m: Meeting) =>
+    void run({
+      type: "SET_CHAT_QUESTIONS",
+      meetingId: m.id,
+      questionIds: m.questionIds.includes(q.id)
+        ? m.questionIds.filter((id) => id !== q.id)
+        : [...m.questionIds, q.id],
+    });
+  if (!chats.length)
+    return <span className="quiet-note">No chats scheduled yet</span>;
+  if (chats.length === 1) {
+    const m = chats[0];
+    const added = m.questionIds.includes(q.id);
+    return (
+      <span className="add-to-chat">
+        <button
+          className={`button compact ${added ? "subtle" : "outline"}`}
+          disabled={busy}
+          onClick={() => toggle(m)}
+          title={added ? "Click to remove it from this chat" : undefined}
+        >
+          {added ? <Check size={14} /> : <Plus size={14} />}
+          {added ? `In ${nameFor(m)} chat` : `Add to ${nameFor(m)} coffee chat`}
+        </button>
+        {added && (
+          <button className="text-button" onClick={() => onOpenChat(m.id)}>
+            Open chat
+          </button>
+        )}
+      </span>
+    );
+  }
+  const inChats = chats.filter((m) => m.questionIds.includes(q.id));
+  return (
+    <span className="add-to-chat">
+      <select
+        aria-label={`Add "${q.text}" to a coffee chat`}
+        value=""
+        disabled={busy}
+        onChange={(e) => {
+          const m = chats.find((item) => item.id === e.target.value);
+          if (m) toggle(m);
+        }}
+      >
+        <option value="">
+          {inChats.length
+            ? `In ${inChats.map((m) => nameFor(m).split(" ")[0]).join(", ")} chat${inChats.length > 1 ? "s" : ""}`
+            : "Add to coffee chat…"}
+        </option>
+        {chats.map((m) => (
+          <option value={m.id} key={m.id}>
+            {m.questionIds.includes(q.id) ? "Remove from" : "Add to"} {nameFor(m)} coffee chat
+          </option>
+        ))}
+      </select>
+    </span>
+  );
+}
+
 function QuestionsPage({
   state: s,
   run,
   busy,
+  onOpenChat,
 }: {
   state: AppState;
   run: Runner;
   busy: boolean;
+  onOpenChat: (meetingId: string) => void;
 }) {
   const [tab, setTab] = useState<"approved" | "suggested">("approved"),
     [text, setText] = useState(""),
@@ -2239,7 +2361,7 @@ function QuestionsPage({
         <PageHeading
           eyebrow="FOR YOUR COFFEE CHATS"
           title="Question bank"
-          description="Questions you want to ask. Prep briefs pick from the ones you've added."
+          description="Questions you want to ask. Add them to a scheduled coffee chat, or let a prep brief pick from them."
         />
         <button
           className="button primary"
@@ -2248,7 +2370,7 @@ function QuestionsPage({
             if (
               await run(
                 { type: "SUGGEST_QUESTIONS" },
-                "Fresh questions are ready to review",
+                "Suggested questions are ready to review",
               )
             )
               setTab("suggested");
@@ -2257,186 +2379,489 @@ function QuestionsPage({
           <Sparkles size={16} /> Suggest questions
         </button>
       </div>
-      <div className="questions-intro">
-        <BookOpen size={23} />
-        <p>
-          Your prep briefs use questions you’ve approved. Add the ones that
-          sound like you, and skip the rest.
-        </p>
-      </div>
+      <form className="panel question-add-row" onSubmit={addQuestion}>
+        <input
+          aria-label="Write your own question"
+          placeholder="Write your own question…"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={500}
+          required
+        />
+        <select
+          aria-label="Question category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value as QuestionCategory)}
+        >
+          {Object.entries(categoryLabels).map(([v, l]) => (
+            <option value={v} key={v}>
+              {l}
+            </option>
+          ))}
+        </select>
+        <button className="button primary compact" disabled={busy || !text.trim()}>
+          <Plus size={14} /> Add question
+        </button>
+      </form>
       <div className="tabs standalone">
         <button
           className={tab === "approved" ? "active" : ""}
           onClick={() => setTab("approved")}
         >
           My question bank{" "}
-          <span>
-            {s.questions.filter((q) => q.status === "approved").length}
-          </span>
+          <span>{s.questions.filter((q) => q.status === "approved").length}</span>
         </button>
         <button
           className={tab === "suggested" ? "active" : ""}
           onClick={() => setTab("suggested")}
         >
-          For your consideration{" "}
-          <span>
-            {s.questions.filter((q) => q.status === "suggested").length}
-          </span>
+          Suggestions{" "}
+          <span>{s.questions.filter((q) => q.status === "suggested").length}</span>
         </button>
       </div>
-      <div className="questions-grid">
+      <section className="panel question-list" aria-label="Questions">
         {list.map((q) => (
-          <QuestionCard key={q.id} question={q} run={run} busy={busy} />
+          <QuestionRow
+            key={q.id}
+            question={q}
+            state={s}
+            run={run}
+            busy={busy}
+            onOpenChat={onOpenChat}
+          />
         ))}
         {!list.length && (
-          <div className="panel">
-            <Empty
-              icon={<BookOpen size={28} />}
-              title={
-                tab === "approved"
-                  ? "Your curiosity belongs here."
-                  : "All considered."
-              }
-            >
-              {tab === "approved"
-                ? "Add a question below or review a few suggestions."
-                : "Ask for more suggestions whenever you’re ready."}
-            </Empty>
-          </div>
+          <Empty
+            icon={<BookOpen size={28} />}
+            title={tab === "approved" ? "No questions yet." : "No suggestions waiting."}
+          >
+            {tab === "approved"
+              ? "Write one above, or click Suggest questions."
+              : "Click Suggest questions to get more."}
+          </Empty>
         )}
-        <form className="question-card write-question" onSubmit={addQuestion}>
-          <span className="eyebrow">ONE OF YOUR OWN</span>
-          <textarea
-            rows={3}
-            aria-label="Write your own question"
-            placeholder="What are you curious about?"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            required
-            maxLength={500}
-          />
-          <div className="question-bottom">
-            <select
-              aria-label="Question category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value as QuestionCategory)}
-            >
-              {Object.entries(categoryLabels).map(([v, l]) => (
-                <option value={v} key={v}>
-                  {l}
-                </option>
-              ))}
-            </select>
-            <button
-              className="button primary compact"
-              disabled={busy || !text.trim()}
-            >
-              <Plus size={14} /> Add question
-            </button>
-          </div>
-        </form>
-      </div>
+      </section>
     </>
   );
 }
-function QuestionCard({
+
+function QuestionRow({
   question: q,
+  state: s,
   run,
   busy,
+  onOpenChat,
 }: {
   question: Question;
+  state: AppState;
   run: Runner;
   busy: boolean;
+  onOpenChat: (meetingId: string) => void;
 }) {
   const [text, setText] = useState(q.text),
     [editing, setEditing] = useState(false);
   return (
-    <article className="question-card">
-      <div className="question-top">
+    <div className="question-row">
+      <span className="question-row-category">
         <Badge>{categoryLabels[q.category]}</Badge>
-        <span>
-          {q.source === "ai_suggested" ? (
-            <Sparkles size={14} />
-          ) : (
-            <MessageSquare size={14} />
-          )}
-        </span>
+      </span>
+      <div className="question-row-text">
+        {editing ? (
+          <input
+            aria-label="Edit question"
+            value={text}
+            autoFocus
+            onChange={(e) => setText(e.target.value)}
+          />
+        ) : (
+          <p>{q.text}</p>
+        )}
+        <small>
+          {q.source === "ai_suggested" ? "Suggested by AI" : "Written by you"}
+          {q.timesUsed ? ` · used in ${q.timesUsed} chat${q.timesUsed === 1 ? "" : "s"}` : ""}
+          {q.landedWell ? ` · landed well ${q.landedWell}×` : ""}
+        </small>
       </div>
-      {editing ? (
-        <textarea
-          aria-label="Edit question"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          rows={3}
-        />
-      ) : (
-        <h3>{q.text}</h3>
-      )}
-      <div className="question-bottom">
+      <div className="question-row-actions">
         {q.status === "suggested" ? (
           <>
             <button
               className="text-button muted"
               disabled={busy}
               onClick={() =>
-                void run({
-                  type: "UPDATE_QUESTION",
-                  question: { ...q, status: "skipped" },
-                })
+                void run({ type: "UPDATE_QUESTION", question: { ...q, status: "skipped" } })
               }
             >
-              Skip <X size={13} />
+              Skip
             </button>
-            <div className="inline-actions">
-              <button
-                className="text-button"
-                onClick={() => setEditing((v) => !v)}
-              >
-                Edit
-              </button>
-              <button
-                className="button primary compact"
-                disabled={busy || !text.trim()}
-                onClick={() =>
-                  void run(
-                    {
-                      type: "UPDATE_QUESTION",
-                      question: { ...q, text, status: "approved" },
-                    },
-                    "Added to your bank",
-                  )
-                }
-              >
-                <Plus size={14} /> Add to bank
-              </button>
-            </div>
+            <button className="text-button" onClick={() => setEditing((v) => !v)}>
+              {editing ? "Done" : "Edit"}
+            </button>
+            <button
+              className="button primary compact"
+              disabled={busy || !text.trim()}
+              onClick={() =>
+                void run(
+                  { type: "UPDATE_QUESTION", question: { ...q, text, status: "approved" } },
+                  "Added to your bank",
+                )
+              }
+            >
+              <Plus size={14} /> Add to bank
+            </button>
           </>
         ) : (
           <>
-            <span className="quiet-note">
-              <CheckCircle2 size={13} />
-              {q.timesUsed
-                ? `Used in ${q.timesUsed} brief${q.timesUsed === 1 ? "" : "s"}`
-                : "Ready for your next chat"}
-            </span>
             <button
               className="text-button"
               disabled={busy || !text.trim()}
               onClick={async () => {
                 if (editing)
-                  await run(
-                    { type: "UPDATE_QUESTION", question: { ...q, text } },
-                    "Question updated",
-                  );
+                  await run({ type: "UPDATE_QUESTION", question: { ...q, text } }, "Question updated");
                 setEditing((v) => !v);
               }}
             >
               {editing ? "Save" : "Edit"}
             </button>
+            <AddToChat question={q} state={s} run={run} busy={busy} onOpenChat={onOpenChat} />
           </>
         )}
       </div>
-    </article>
+    </div>
+  );
+}
+
+/** All scheduled coffee chats; open one to pick questions and see everything about the person. */
+function ChatsPage({
+  state: s,
+  run,
+  busy,
+  chatId,
+  onChat,
+  onContact,
+}: {
+  state: AppState;
+  run: Runner;
+  busy: boolean;
+  chatId: string | null;
+  onChat: (id: string) => void;
+  onContact: (contactId: string) => void;
+}) {
+  const upcoming = upcomingChats(s);
+  const past = s.meetings
+    .filter((m) => !upcoming.includes(m))
+    .sort((a, b) => b.start.localeCompare(a.start));
+  const chat = s.meetings.find((m) => m.id === chatId) || upcoming[0] || past[0];
+  const row = (m: Meeting) => {
+    const c = s.contacts.find((item) => item.id === m.contactId);
+    return (
+      <button
+        key={m.id}
+        className={`chat-row ${chat?.id === m.id ? "active" : ""}`}
+        onClick={() => onChat(m.id)}
+      >
+        <Avatar name={c?.name || "Coffee chat"} small />
+        <span>
+          <strong>{c?.name || "Coffee chat"}</strong>
+          <small>{chatWhen(m)}</small>
+        </span>
+        <span className="chat-row-count" title="Questions added">
+          {m.questionIds.length} <BookOpen size={12} />
+        </span>
+      </button>
+    );
+  };
+  return (
+    <>
+      <PageHeading
+        eyebrow="SCHEDULED"
+        title="Coffee chats"
+        description="Open a chat to choose your questions and see everything you have on the person."
+      />
+      {!s.meetings.length ? (
+        <div className="panel">
+          <Empty icon={<CalendarDays size={28} />} title="No coffee chats yet.">
+            Once someone agrees to a time, the chat shows up here.
+          </Empty>
+        </div>
+      ) : (
+        <div className="chats-layout">
+          <nav className="panel chats-list" aria-label="Coffee chats">
+            <div className="chats-list-heading">Upcoming</div>
+            {upcoming.map(row)}
+            {!upcoming.length && <p className="muted">Nothing upcoming.</p>}
+            {past.length > 0 && (
+              <>
+                <div className="chats-list-heading">Past</div>
+                {past.map(row)}
+              </>
+            )}
+          </nav>
+          {chat && (
+            <ChatDetail
+              key={chat.id}
+              meeting={chat}
+              state={s}
+              run={run}
+              busy={busy}
+              onContact={onContact}
+            />
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function ChatDetail({
+  meeting: m,
+  state: s,
+  run,
+  busy,
+  onContact,
+}: {
+  meeting: Meeting;
+  state: AppState;
+  run: Runner;
+  busy: boolean;
+  onContact: (contactId: string) => void;
+}) {
+  const [filter, setFilter] = useState<QuestionCategory | "all">("all");
+  const c = s.contacts.find((item) => item.id === m.contactId);
+  const target = c && s.targets.find((t) => t.id === c.targetId);
+  const chosen = m.questionIds
+    .map((id) => s.questions.find((q) => q.id === id))
+    .filter((q): q is Question => !!q);
+  const bank = s.questions.filter(
+    (q) =>
+      q.status === "approved" &&
+      !m.questionIds.includes(q.id) &&
+      (filter === "all" || q.category === filter),
+  );
+  const setQuestions = (ids: string[]) =>
+    void run({ type: "SET_CHAT_QUESTIONS", meetingId: m.id, questionIds: ids });
+  const history = s.activities
+    .filter((e) => e.contactId === m.contactId)
+    .sort((a, b) => b.at - a.at)
+    .slice(0, 6);
+  const sent = s.drafts.filter((d) => d.contactId === m.contactId && d.status === "sent");
+  const first = c?.name.split(" ")[0] || "them";
+  return (
+    <section className="panel chat-detail">
+      <div className="chat-detail-header">
+        <Avatar name={c?.name || "Coffee chat"} />
+        <div>
+          <h2>{c?.name || "Coffee chat"}</h2>
+          <p>
+            {c?.title}
+            {c?.company ? ` · ${c.company}` : ""}
+          </p>
+          <p className="chat-when">
+            <CalendarDays size={14} /> {chatWhen(m)}
+            {m.meetLink && (
+              <>
+                {" · "}
+                <a href={m.meetLink} target="_blank" rel="noreferrer">
+                  Join Google Meet <ExternalLink size={12} />
+                </a>
+              </>
+            )}
+          </p>
+        </div>
+        <div className="chat-detail-actions">
+          {c && (
+            <button className="button outline compact" onClick={() => onContact(c.id)}>
+              Full profile
+            </button>
+          )}
+          {c && (
+            <button
+              className="button primary compact"
+              disabled={busy}
+              onClick={() =>
+                void run({ type: "GENERATE_PREP_BRIEF", contactId: c.id }, "Prep brief ready")
+              }
+            >
+              <Sparkles size={14} /> {m.prepBrief ? "Redo prep brief" : "Make prep brief"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="chat-detail-grid">
+        <div>
+          <h3>
+            Questions for this chat <span>{chosen.length}</span>
+          </h3>
+          {chosen.length ? (
+            <ol className="chat-questions">
+              {chosen.map((q) => (
+                <li key={q.id}>
+                  <span>{q.text}</span>
+                  <button
+                    className="icon-button"
+                    title="Remove from this chat"
+                    aria-label={`Remove "${q.text}" from this chat`}
+                    disabled={busy}
+                    onClick={() => setQuestions(m.questionIds.filter((id) => id !== q.id))}
+                  >
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="muted">No questions yet. Add some from your bank below.</p>
+          )}
+
+          <h3 className="chat-bank-heading">
+            Your question bank
+            <select
+              aria-label="Filter by category"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value as QuestionCategory | "all")}
+            >
+              <option value="all">All categories</option>
+              {Object.entries(categoryLabels).map(([v, l]) => (
+                <option value={v} key={v}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </h3>
+          <ul className="chat-bank">
+            {bank.map((q) => (
+              <li key={q.id}>
+                <Badge>{categoryLabels[q.category]}</Badge>
+                <span>{q.text}</span>
+                <button
+                  className="button outline compact"
+                  disabled={busy}
+                  onClick={() => setQuestions([...m.questionIds, q.id])}
+                >
+                  <Plus size={13} /> Add
+                </button>
+              </li>
+            ))}
+            {!bank.length && (
+              <li className="muted">Everything here is already in this chat.</li>
+            )}
+          </ul>
+        </div>
+
+        <aside className="chat-about">
+          <h3>About {first}</h3>
+          <dl>
+            {c?.title && (
+              <>
+                <dt>Role</dt>
+                <dd>
+                  {c.title} at {c.company}
+                </dd>
+              </>
+            )}
+            {target && (
+              <>
+                <dt>Your target job</dt>
+                <dd>
+                  {target.role} at {target.company}
+                </dd>
+              </>
+            )}
+            {c?.email && (
+              <>
+                <dt>Email</dt>
+                <dd>
+                  {c.email}{" "}
+                  <Badge tone={c.emailVerified ? "green" : "amber"}>
+                    {c.emailVerified
+                      ? "Confirmed"
+                      : `${Math.round((c.emailConfidence || 0) * 100)}% guess`}
+                  </Badge>
+                </dd>
+              </>
+            )}
+            {c?.linkedinUrl && (
+              <>
+                <dt>LinkedIn</dt>
+                <dd>
+                  <a href={c.linkedinUrl} target="_blank" rel="noreferrer">
+                    Profile <ExternalLink size={12} />
+                  </a>
+                </dd>
+              </>
+            )}
+            {c?.xHandle && (
+              <>
+                <dt>X</dt>
+                <dd>
+                  <a href={c.xUrl} target="_blank" rel="noreferrer">
+                    @{c.xHandle} <ExternalLink size={12} />
+                  </a>
+                  {c.xPost && <blockquote>“{c.xPost.excerpt}”</blockquote>}
+                </dd>
+              </>
+            )}
+            {c?.warmPaths.length ? (
+              <>
+                <dt>What you share</dt>
+                <dd>{c.warmPaths.map((w) => w.detail).join(" · ")}</dd>
+              </>
+            ) : null}
+            {c?.reason && (
+              <>
+                <dt>Why them</dt>
+                <dd>{c.reason}</dd>
+              </>
+            )}
+            {c?.connectionDegree && (
+              <>
+                <dt>Connection</dt>
+                <dd>
+                  {c.connectionDegree === 1 ? "1st" : c.connectionDegree === 2 ? "2nd" : "3rd"}
+                  -degree on LinkedIn
+                </dd>
+              </>
+            )}
+            {c?.notes && (
+              <>
+                <dt>Your notes</dt>
+                <dd>{c.notes}</dd>
+              </>
+            )}
+          </dl>
+          {sent.length > 0 && (
+            <>
+              <h4>Messages you sent ({sent.length})</h4>
+              {sent.slice(-2).map((d) => (
+                <p className="chat-sent" key={d.id}>
+                  {d.body.slice(0, 220)}
+                  {d.body.length > 220 ? "…" : ""}
+                </p>
+              ))}
+            </>
+          )}
+          {history.length > 0 && (
+            <>
+              <h4>Recent activity</h4>
+              <ul className="chat-history">
+                {history.map((e) => (
+                  <li key={e.id}>
+                    {e.summary} <small>{new Date(e.at).toLocaleDateString()}</small>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {m.prepBrief && (
+            <details className="chat-brief">
+              <summary>Prep brief</summary>
+              <pre>{m.prepBrief}</pre>
+            </details>
+          )}
+        </aside>
+      </div>
+    </section>
   );
 }
 

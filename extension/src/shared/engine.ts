@@ -457,7 +457,7 @@ export async function applyAction(
     const allowed = new Map(
       available.map((question) => [question.id, question]),
     );
-    const picked = brief.picked
+    let picked = brief.picked
       .filter((item) => allowed.has(item.questionId))
       .filter(
         (item, index, all) =>
@@ -472,6 +472,19 @@ export async function applyAction(
         !picked.some((item) => item.questionId === question.id)
       )
         picked.push({ questionId: question.id, tailoredText: question.text });
+    // Questions you added to this chat by hand always stay, first; the AI fills the rest up to 5.
+    const approvedById = new Map(approved.map((question) => [question.id, question]));
+    const handPicked = (meeting?.questionIds || []).filter((qid) => approvedById.has(qid));
+    picked = [
+      ...handPicked.map(
+        (qid) =>
+          picked.find((item) => item.questionId === qid) || {
+            questionId: qid,
+            tailoredText: approvedById.get(qid)!.text,
+          },
+      ),
+      ...picked.filter((item) => !handPicked.includes(item.questionId)),
+    ].slice(0, Math.max(5, handPicked.length));
     const additions =
       picked.length < 5
         ? (brief.newQuestions || []).slice(0, 5 - picked.length)
@@ -508,7 +521,7 @@ export async function applyAction(
         await services.updateMeetingDescription(meeting.calendarEventId, text);
       for (const pickedQuestion of picked)
         if (!meeting.questionIds.includes(pickedQuestion.questionId))
-          allowed.get(pickedQuestion.questionId)!.timesUsed++;
+          approvedById.get(pickedQuestion.questionId)!.timesUsed++;
       meeting.prepBrief = text;
       meeting.questionIds = picked.map((item) => item.questionId);
     }
@@ -1242,6 +1255,23 @@ export async function applyAction(
         action.question.status === "approved"
           ? "Question added to your bank."
           : "Question updated.";
+      break;
+    }
+    case "SET_CHAT_QUESTIONS": {
+      const meeting = state.meetings.find((item) => item.id === action.meetingId);
+      if (!meeting) throw new Error("Coffee chat not found.");
+      const approvedIds = new Set(
+        state.questions.filter((item) => item.status === "approved").map((item) => item.id),
+      );
+      const ids = [...new Set(action.questionIds)];
+      if (ids.some((qid) => !approvedIds.has(qid)))
+        throw new Error("Only questions in your bank can be added to a coffee chat.");
+      const added = ids.filter((qid) => !meeting.questionIds.includes(qid)).length;
+      meeting.questionIds = ids;
+      const name = state.contacts.find((item) => item.id === meeting.contactId)?.name || "this person";
+      message = added
+        ? `Added to your coffee chat with ${name}.`
+        : `Removed from your coffee chat with ${name}.`;
       break;
     }
     case "GENERATE_PREP_BRIEF":
