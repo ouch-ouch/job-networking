@@ -141,7 +141,11 @@ type DiscoveryJob = {
   mode: 'live' | 'fixture';
 };
 
-type PersonResearchInput = { personId: string; handle: string; jobContextId: string; jobContextVersion: string; topicHints: string[] };
+type PersonResearchInput = {
+  personId: string; handle: string; jobContextId: string; jobContextVersion: string; topicHints: string[];
+  jobContext: { employer: string; title: string };
+  refresh?: boolean;                   // bypass the 7-day cache
+};
 
 type StyleDimension = 'length' | 'formality' | 'technical_depth' | 'directness' | 'humor';
 type CommunicationContext = {
@@ -156,7 +160,8 @@ type DraftInput = {
   kind: 'reply' | 'dm' | 'coffee_invite' | 'follow_up' | 'thank_you';
   jobContext: DiscoveryInput['jobContext'];
   profile: DiscoveryInput['profile'] & { voice: { sampleText?: string; preferences: string[] } };
-  person: Recommendation;
+  // Only identity and display fields; source IDs are checked against the backend's own registry.
+  person: { personId: string; handle: string; displayName?: string; relevance?: string; affiliationClaim?: string };
   communicationContextId?: string;     // researched on demand if missing or expired
   selectedSourceId?: string;           // the post being replied to / referenced
   userGoal?: string;                   // free text from the user, optional
@@ -168,7 +173,10 @@ type DraftResult = ValidatedDraft & {
   approach: string;                    // "Why this approach": post, style observations, relevant fact
   lengthCheck: { surface: 'x_reply' | 'x_dm'; weightedLength: number; limit: number | null; ok: boolean };
   sparseEvidence: boolean;
+  mode: 'live' | 'fixture';
 };
+// POST /v1/drafts responds { draft: DraftResult, usage: Usage }.
+// POST /v1/person-research responds { context, sources, cached, usage, mode }.
 
 type BackendError = {
   code: 'invalid_input' | 'stale_context' | 'provider_unavailable' | 'rate_limited' | 'invalid_credentials'
