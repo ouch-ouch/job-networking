@@ -57,6 +57,8 @@ While reading, the button says **Importing…**. Errors and duplicate-only resul
 
 ### Before reporting a live test as successful
 
+For **Find people on X**, the panel shows the current research stage and the number of people found so far. If a search stops early, available evidence-backed contacts are added with an incomplete-results notice and a **View added people** button. If none completed, the error says so. A timed-out X search call is not automatically restarted; retries of explicit transient failures remain bounded. The evidence requirements and daily budget still apply. Each new click on **Find people on X** starts a new research job and can use API credits.
+
 Run `npm test` and `npm run build`. Live job parsing and search planning have been exercised with Grok; the automated suite uses mocks for Gmail/Calendar and never sends real outreach. For an end-to-end test, use a separate inbox you control, confirm its address in the contact form, generate/review/approve/send one message, reply from that inbox, and check reply detection. Create a test Calendar event only when you intend to send its attendee invitation. See the detailed verification steps in [docs/SETUP.md](docs/SETUP.md#4-verify-real-actions-in-order).
 
 ## Run the demo

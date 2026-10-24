@@ -18,7 +18,9 @@ import { CitedSources, type SourceRegistry } from './sources';
 
 const SEARCH_PARALLELISM = 2;
 const RECENT_DAYS = 45;
-const CANDIDATES_PER_SEARCH = 5;
+// Three focused angles can still produce up to nine candidates for three final picks.
+// Limit output work without relaxing citation validation or evidence scoring.
+const CANDIDATES_PER_SEARCH = 3;
 const BASIS_STRENGTH: Record<AffiliationBasis, number> = { bio: 3, own_post: 2, third_party: 1, inferred: 0 };
 
 export type DiscoveryDeps = CallDeps & { provider: ResearchProvider; registry: SourceRegistry; now?: () => Date };
@@ -145,11 +147,11 @@ function parseCandidates(output: unknown): CandidateOutput[] {
   });
 }
 
-async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>, signal: AbortSignal): Promise<PromiseSettledResult<R>[]> {
   const results: PromiseSettledResult<R>[] = new Array(items.length);
   let next = 0;
   const worker = async () => {
-    while (next < items.length) {
+    while (next < items.length && !signal.aborted) {
       const i = next++;
       try {
         results[i] = { status: 'fulfilled', value: await fn(items[i]) };
@@ -181,12 +183,14 @@ export async function runDiscovery(
   const searchOne = async (plan: SearchPlan) => {
     // Malformed output gets one regeneration; transient errors are retried inside callProvider.
     for (let attempt = 0; ; attempt++) {
+      if (signal.aborted) throw toBackendFailure(signal.reason);
       const result = await callProvider(deps, 'search', meter, signal, (s) =>
         deps.provider.discoverCandidates(
           { plan, job: input.jobContext, facts, maxCandidates: CANDIDATES_PER_SEARCH, today: now.toISOString().slice(0, 10) },
           s,
         ),
       );
+      if (signal.aborted) throw toBackendFailure(signal.reason);
       try {
         const cited = new CitedSources(result.citations, now);
         const found = parseCandidates(result.output)
@@ -202,7 +206,7 @@ export async function runDiscovery(
     }
   };
 
-  const settled = await mapLimit(plans, SEARCH_PARALLELISM, searchOne);
+  const settled = await mapLimit(plans, SEARCH_PARALLELISM, searchOne, signal);
   if (signal.aborted) throw toBackendFailure(signal.reason);
   const failures = settled.flatMap((s) => (s.status === 'rejected' ? [toBackendFailure(s.reason)] : []));
 

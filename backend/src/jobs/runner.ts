@@ -14,6 +14,7 @@ export class Semaphore {
   constructor(private readonly max: number) {}
 
   async acquire(signal: AbortSignal): Promise<void> {
+    if (signal.aborted) throw signal.reason;
     if (this.active < this.max) {
       this.active++;
       return;
@@ -100,9 +101,9 @@ export function startDiscovery(input: DiscoveryInput, deps: RunnerDeps, idempote
       finish(outcome.failure ? 'partial' : 'succeeded', outcome.failure);
     } catch (err) {
       const failure = controller.signal.aborted
-        ? new BackendFailure('cancelled', 'Research was cancelled. Completed results were kept.')
+        ? new BackendFailure('cancelled', 'Research was cancelled.')
         : timeout.aborted
-          ? new BackendFailure('timeout', 'Research took too long. Completed results were kept.', true)
+          ? new BackendFailure('timeout', 'Research timed out.', true)
           : toBackendFailure(err);
       const keptResults = job.recommendations.length > 0;
       finish(failure.code === 'cancelled' ? 'cancelled' : keptResults ? 'partial' : 'failed', failure);
@@ -115,6 +116,15 @@ export function startDiscovery(input: DiscoveryInput, deps: RunnerDeps, idempote
   const finish = (status: DiscoveryJob['status'], failure?: BackendFailure) => {
     job.status = status;
     job.usage = meter.toJSON();
+    if (failure?.code === 'timeout' || failure?.code === 'cancelled') {
+      const action = failure.code === 'timeout' ? 'Research timed out' : 'Research was cancelled';
+      const count = job.recommendations.length;
+      const message = count > 0
+        ? `${action}. Kept ${count} verified ${count === 1 ? 'person' : 'people'} and their sources.`
+        : `${action} before any people could be verified. No results were kept.`;
+      failure = new BackendFailure(failure.code, message, failure.retryable, failure.retryAfterMs);
+      job.progress = { stage: 'done', message };
+    }
     if (failure) job.error = failure.toJSON();
     if (status !== 'succeeded' && job.progress.stage !== 'done') job.progress = { ...job.progress, message: failure?.message ?? job.progress.message };
     if (job.recommendations.length > 0) deps.registry.add(job.sources);
@@ -128,7 +138,7 @@ export function cancelDiscovery(jobId: string, store: JobStore): DiscoveryJob {
   const record = store.get(jobId);
   if (!record) throw new BackendFailure('job_not_found', 'This research job no longer exists. Start a new search.');
   if (record.job.status === 'queued' || record.job.status === 'running') {
-    record.controller.abort(new BackendFailure('cancelled', 'Research was cancelled. Completed results were kept.'));
+    record.controller.abort(new BackendFailure('cancelled', 'Research was cancelled.'));
   }
   return record.job;
 }

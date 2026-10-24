@@ -35,10 +35,32 @@ describe('XaiResearchProvider', () => {
     const sent = JSON.parse(calls[0].init.body as string);
     expect(sent.model).toBe('grok-test');
     expect(sent.store).toBe(false);
+    expect(sent.max_output_tokens).toBe(8192);
+    expect(sent.reasoning).toBeUndefined(); // unrecognized models keep their supported defaults
     expect(sent.tools).toEqual([{ type: 'x_search', from_date: '2026-04-27', excluded_x_handles: ['me'] }]);
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe('Bearer k');
     expect(JSON.stringify(sent)).not.toContain('NYU'); // fact not selected for this plan
     expect(result.citations).toEqual(['https://x.com/a/status/1']);
+  });
+
+  it('uses low reasoning only for documented grok-4.7 search calls, without changing generation settings', async () => {
+    const search = fakeFetch(200, { output_text: '{"candidates":[]}' });
+    await new XaiResearchProvider({ ...cfg, XAI_MODEL: 'grok-4.7' }, search.impl)
+      .discoverCandidates({ ...req, maxCandidates: 3 }, new AbortController().signal);
+    const sent = JSON.parse(search.calls[0].init.body as string);
+    expect(sent.reasoning).toEqual({ effort: 'low' });
+    expect(sent.max_output_tokens).toBe(8192);
+    expect(sent.tools[0].type).toBe('x_search');
+
+    const generation = fakeFetch(200, { output_text: '{"text":"Synthetic draft"}' });
+    await new XaiResearchProvider({ ...cfg, XAI_MODEL: 'grok-4.7' }, generation.impl).composeDraft({
+      kind: 'reply', job: { employer: 'Acme', title: 'Engineer' }, facts: [], person: { handle: 'synthetic', relevance: 'Synthetic test context' },
+      threads: [], style: {}, voice: { preferences: [] }, sparseEvidence: true, maxWeightedLength: 280,
+    }, new AbortController().signal);
+    const draft = JSON.parse(generation.calls[0].init.body as string);
+    expect(draft.reasoning).toBeUndefined();
+    expect(draft.max_output_tokens).toBeUndefined();
+    expect(draft.tools).toBeUndefined();
   });
 
   it('maps HTTP failures to distinct recoverable errors', async () => {

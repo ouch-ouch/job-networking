@@ -124,6 +124,10 @@ export class XaiResearchProvider implements ResearchProvider {
         headers: { Authorization: `Bearer ${this.cfg.XAI_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: this.cfg.XAI_MODEL,
+          // grok-4.7 supports low-effort tool calling; other models keep their defaults.
+          // https://docs.x.ai/developers/model-capabilities/text/reasoning
+          ...(tool && this.cfg.XAI_MODEL === 'grok-4.7' && { reasoning: { effort: 'low' } }),
+          ...(tool && { max_output_tokens: 8192 }),
           input: [
             { role: 'system', content: system },
             { role: 'user', content: user },

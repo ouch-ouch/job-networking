@@ -79,13 +79,19 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** Retries transient provider failures at most twice, honoring retry-after. */
-export async function withRetry<T>(fn: () => Promise<T>, signal: AbortSignal, attempts = 3, baseMs = 500): Promise<T> {
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  signal: AbortSignal,
+  attempts = 3,
+  baseMs = 500,
+  shouldRetry: (failure: BackendFailure) => boolean = () => true,
+): Promise<T> {
   for (let i = 0; ; i++) {
     try {
       return await fn();
     } catch (err) {
       const f = toBackendFailure(err);
-      if (!f.retryable || i >= attempts - 1 || signal.aborted) throw f;
+      if (!f.retryable || !shouldRetry(f) || i >= attempts - 1 || signal.aborted) throw f;
       const backoff = baseMs * 2 ** i * (0.5 + Math.random());
       await sleep(f.retryAfterMs ?? backoff, signal);
     }
@@ -93,6 +99,23 @@ export async function withRetry<T>(fn: () => Promise<T>, signal: AbortSignal, at
 }
 
 export type CallDeps = { cfg: Config; budget: Budget };
+
+/** Settle at the deadline even if a provider adapter is slow to reject an aborted call. */
+function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    const onAbort = () => {
+      cleanup();
+      reject(signal.reason);
+    };
+    promise.then(
+      (value) => { cleanup(); resolve(value); },
+      (error: unknown) => { cleanup(); reject(error); },
+    );
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 /**
  * One budgeted provider call with a per-call timeout and bounded retries.
@@ -113,7 +136,7 @@ export async function callProvider(
     meter.providerCalls++;
     const callSignal = AbortSignal.any([signal, AbortSignal.timeout(deps.cfg.PROVIDER_TIMEOUT_MS)]);
     try {
-      const result = await fn(callSignal);
+      const result = await abortable(fn(callSignal), callSignal);
       const charged = result.usage.free ? 0 : Math.max(estimate, result.usage.costUsd ?? 0);
       deps.budget.settle(reservation, charged);
       meter.estimatedUsd += charged;
@@ -126,5 +149,5 @@ export async function callProvider(
       meter.estimatedUsd += charged;
       throw failure;
     }
-  }, signal);
+  }, signal, 3, 500, (failure) => kind !== 'search' || failure.code !== 'timeout');
 }

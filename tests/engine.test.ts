@@ -64,7 +64,7 @@ function harness() {
     fillLinkedIn: async () => {
       calls.linkedin++;
     },
-    discoverOnX: async () => [],
+    discoverOnX: async () => ({ contacts: [], status: "succeeded" }),
   };
   return { services, calls };
 }
@@ -1030,7 +1030,7 @@ test("X: live discovery goes through the backend service and skips people alread
     asked++;
     assert.equal(t.id, target.id);
     assert.equal(backendUrl, state.settings.backendUrl);
-    return [person];
+    return { contacts: [person], status: "succeeded" };
   };
   const first = await applyAction(state, { type: "FIND_ON_X", targetId: target.id }, services);
   assert.match(first.message || "", /1 people found on X/);
@@ -1111,4 +1111,33 @@ test("demo import metadata describes fictional examples and does not read a page
   assert.equal(calls.emails, 0);
   assert.equal(calls.linkedin, 0);
   assert.equal(calls.calendar, 0);
+});
+
+test("X: incomplete discovery keeps contacts and warnings, including duplicate results", async () => {
+  const { services, calls } = harness();
+  const state = liveState();
+  const person = { ...state.contacts[0], id: "partial_x_person", xHandle: "partial_person", xUrl: "https://x.com/partial_person" };
+  services.discoverOnX = async () => ({ contacts: [person], status: "partial", warning: "One provider search timed out." });
+  const action = { type: "FIND_ON_X" as const, targetId: state.targets[0].id };
+  const first = await applyAction(state, action, services);
+  assert.deepEqual(first.data, { complete: false, imported: 1, warning: "One provider search timed out." });
+  assert.ok(first.state.contacts.some(contact => contact.id === person.id));
+  assert.match(first.message!, /incomplete.*1 completed person.*One provider search timed out/);
+  const repeated = await applyAction(first.state, action, services);
+  assert.deepEqual(repeated.data, { complete: false, imported: 0, warning: "One provider search timed out." });
+  assert.match(repeated.message!, /already on this target.*One provider search timed out/);
+  assert.doesNotMatch(repeated.message!, /Grok found no one/);
+  assert.equal(calls.emails + calls.linkedin + calls.calendar, 0);
+});
+
+test("X: cancellation with zero contacts stays cancellation feedback instead of claiming no matches", async () => {
+  const { services, calls } = harness();
+  const state = liveState();
+  services.discoverOnX = async () => ({ contacts: [], status: "cancelled", warning: "Research was cancelled by the user." });
+  const result = await applyAction(state, { type: "FIND_ON_X", targetId: state.targets[0].id }, services);
+  assert.deepEqual(result.data, { complete: false, imported: 0, warning: "Research was cancelled by the user." });
+  assert.match(result.message!, /cancelled.*No completed people/);
+  assert.doesNotMatch(result.message!, /Grok found no one/);
+  assert.equal(result.state.contacts.length, state.contacts.length);
+  assert.equal(calls.emails + calls.linkedin + calls.calendar, 0);
 });

@@ -1246,10 +1246,41 @@ function PeopleSearchDialog({
   const [plan, setPlan] = useState<PeopleSearchPlan | null>(null);
   const [planning, setPlanning] = useState(false);
   const [researching, setResearching] = useState(false);
+  const [researchAttempted, setResearchAttempted] = useState(false);
+  const [researchFeedback, setResearchFeedback] = useState("");
+  const [researchImported, setResearchImported] = useState(0);
+  const [researchProgress, setResearchProgress] = useState<{
+    stage: string; message: string; completed: number;
+  } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importAttempted, setImportAttempted] = useState(false);
   const [importFeedback, setImportFeedback] = useState("");
   const importError = useContext(DialogErrorContext);
+  useEffect(() => {
+    const receive = (payload: unknown) => {
+      const event = payload as { targetId?: string; progress?: {
+        stage?: unknown; message?: unknown; completed?: unknown;
+      } } | null;
+      if (event?.targetId !== target?.id || !event?.progress) return;
+      const { stage, message, completed } = event.progress;
+      if (typeof stage === "string" && typeof message === "string" &&
+          typeof completed === "number" && Number.isFinite(completed))
+        setResearchProgress({ stage, message, completed: Math.max(0, completed) });
+    };
+    const onLocal = (event: Event) => receive((event as CustomEvent).detail);
+    const onRuntime = (message: { type?: string }) => {
+      if (message?.type === "CCC_X_RESEARCH_PROGRESS") receive(message);
+      return false;
+    };
+    window.addEventListener("ccc-x-research-progress", onLocal);
+    if (typeof chrome !== "undefined" && chrome.runtime?.onMessage)
+      chrome.runtime.onMessage.addListener(onRuntime);
+    return () => {
+      window.removeEventListener("ccc-x-research-progress", onLocal);
+      if (typeof chrome !== "undefined" && chrome.runtime?.onMessage)
+        chrome.runtime.onMessage.removeListener(onRuntime);
+    };
+  }, [target?.id]);
   const isExtension =
     typeof chrome !== "undefined" && Boolean(chrome.runtime?.id && chrome.tabs?.query);
   const [activePage, setActivePage] = useState<string | null>(null);
@@ -1325,10 +1356,23 @@ function PeopleSearchDialog({
           disabled={busy || !target}
           onClick={async () => {
             if (!target) return;
+            setResearchAttempted(true);
+            setImportAttempted(false);
+            setResearchFeedback("");
+            setResearchImported(0);
+            setResearchProgress({ stage: "planning", message: "Starting X research…", completed: 0 });
             setResearching(true);
             try {
               const result = await run({ type: "FIND_ON_X", targetId: target.id });
-              if (result) onClose();
+              if (result) {
+                const outcome = result.data as {
+                  complete?: boolean; imported?: number; warning?: string;
+                } | undefined;
+                const imported = outcome?.imported || 0;
+                setResearchImported(imported);
+                if (outcome?.complete && imported > 0) onClose();
+                else setResearchFeedback(result.message || outcome?.warning || "Research finished.");
+              }
             } finally {
               setResearching(false);
             }
@@ -1337,6 +1381,25 @@ function PeopleSearchDialog({
           {researching ? <LoaderCircle size={16} className="spin" /> : <AtSign size={16} />}
           {researching ? "Researching on X…" : "Find people on X"}
         </button>
+        {researching && (
+          <div className="research-feedback" role="status" aria-live="polite">
+            <p>{researchProgress?.message || "Starting X research…"}</p>
+            <span>{researchProgress?.completed || 0} people found so far</span>
+          </div>
+        )}
+        {researchAttempted && !researching && importError && (
+          <p className="inline-error" role="alert">{importError}</p>
+        )}
+        {!researching && researchFeedback && (
+          <div className="research-feedback" role="status">
+            <p>{researchFeedback}</p>
+            {researchImported > 0 && (
+              <button className="button outline compact" onClick={onClose}>
+                View {researchImported} added {researchImported === 1 ? "person" : "people"}
+              </button>
+            )}
+          </div>
+        )}
         <div className="callout search-context">
           <Sparkles size={20} />
           <p>
@@ -1350,6 +1413,8 @@ function PeopleSearchDialog({
           disabled={busy || !target}
           onClick={async () => {
             if (!target) return;
+            setResearchAttempted(false);
+            setImportAttempted(false);
             setPlanning(true);
             try {
               const result = await run({
@@ -1537,6 +1602,7 @@ function PeopleSearchDialog({
           aria-busy={importing}
           onClick={async () => {
             if (!target || !canImport) return;
+            setResearchAttempted(false);
             setImportAttempted(true);
             setImportFeedback("");
             setImporting(true);

@@ -2011,6 +2011,25 @@ hr {
   font-size: 12px;
   line-height: 1.6;
 }
+.research-feedback {
+  padding: 12px 14px;
+  margin: 12px 0 18px;
+  border: 1px solid #d5e1cc;
+  border-radius: 6px;
+  color: var(--green);
+  background: var(--sage);
+  font-size: 12px;
+  line-height: 1.65;
+}
+.research-feedback > span {
+  display: block;
+  margin-top: 5px;
+  color: #637469;
+  font-size: 11px;
+}
+.research-feedback .button {
+  margin-top: 10px;
+}
 .callout {
   display: flex;
   gap: 11px;

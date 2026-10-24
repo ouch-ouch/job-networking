@@ -814,9 +814,10 @@ export async function applyAction(
     case "FIND_ON_X": {
       const target = state.targets.find((item) => item.id === action.targetId);
       if (!target) throw new Error("Select a target job first.");
-      const found = state.settings.demoMode
-        ? demoXContacts(target)
+      const result = state.settings.demoMode
+        ? { contacts: demoXContacts(target), status: "succeeded" as const, warning: undefined }
         : await services.discoverOnX(target, state.profile, state.settings.backendUrl);
+      const found = result.contacts;
       const additions = found.filter(
         (person) =>
           !state.contacts.some(
@@ -826,13 +827,18 @@ export async function applyAction(
       state.contacts.push(...additions);
       for (const contact of additions)
         event(state, contact.id, "contact_added", `${contact.name} (@${contact.xHandle}) found on X by Grok research.`);
+      const complete = result.status === "succeeded";
+      const warning = complete ? result.warning : result.warning || (result.status === "cancelled" ? "X research was cancelled before completion." : "X research only completed partially.");
+      data = { complete, imported: additions.length, ...(warning ? { warning } : {}) };
       message = state.settings.demoMode
         ? `${additions.length} fictional X people added. Demo mode: no X search ran.`
-        : additions.length
-          ? `${additions.length} people found on X, each with the post that makes them relevant.`
-          : found.length
-            ? "Those people are already on this target."
-            : "Grok found no one on X with real evidence for this job. Try a broader posting.";
+        : !complete
+          ? `${result.status === "cancelled" ? "X research was cancelled." : "X research is incomplete."} ${additions.length ? `${additions.length} completed ${additions.length === 1 ? "person was" : "people were"} added.` : found.length ? `All ${found.length} completed results are already on this target; no new people were added.` : "No completed people were available to add."} ${warning}`
+          : additions.length
+            ? `${additions.length} people found on X, each with the post that makes them relevant.`
+            : found.length
+              ? "Those people are already on this target."
+              : "Grok found no one on X with real evidence for this job. Try a broader posting.";
       break;
     }
     case "GENERATE_DRAFTS": {
