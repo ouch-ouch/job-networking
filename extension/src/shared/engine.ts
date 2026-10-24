@@ -13,7 +13,7 @@ import type {
 } from "./types";
 import { getState, saveState, switchMode } from "./storage";
 import { createDemoState, demoXContacts } from "./mock";
-import { aiRequest } from "./ai";
+import { aiRequest, demoResponse } from "./ai";
 import { connectGoogle } from "../google/auth";
 import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
@@ -565,13 +565,29 @@ export async function applyAction(
     case "PARSE_JOB": {
       if (action.rawDescription.trim().length < 30)
         throw new Error("Paste a job description with at least 30 characters.");
-      const parsed = await ai<Omit<Target, "id" | "rawDescription">>(
-        "/ai/parse-job",
-        { rawDescription: action.rawDescription },
-      );
-      if (!parsed.company?.trim() || !parsed.role?.trim())
+      // Adding a job shouldn't depend on AI: if Grok is unavailable (no key, server down),
+      // fall back to the simple text reader demo mode uses, and say so.
+      let parsed: Omit<Target, "id" | "rawDescription">;
+      let aiUnavailable = "";
+      try {
+        parsed = await ai<Omit<Target, "id" | "rawDescription">>(
+          "/ai/parse-job",
+          { rawDescription: action.rawDescription },
+        );
+      } catch (error) {
+        if (state.settings.demoMode) throw error;
+        aiUnavailable = error instanceof Error ? error.message : "AI unavailable";
+        parsed = demoResponse("parse-job", {
+          rawDescription: action.rawDescription,
+        }) as Omit<Target, "id" | "rawDescription">;
+      }
+      const missing = (value?: string) =>
+        !value?.trim() || value.trim() === "Not specified";
+      if (missing(parsed.company) || missing(parsed.role))
         throw new Error(
-          "The job needs a company and role. Add them to the description and try again.",
+          aiUnavailable
+            ? `AI isn't connected (${aiUnavailable}) Add "Company: …" and "Role: …" lines to the description and try again.`
+            : "The job needs a company and role. Add them to the description and try again.",
         );
       const target: Target = {
         ...parsed,
@@ -583,7 +599,9 @@ export async function applyAction(
       };
       state.targets.push(target);
       data = target;
-      message = `${target.company} target added.`;
+      message = aiUnavailable
+        ? `${target.company} target added with basic text reading because AI isn't connected. Check the company, role, and skills.`
+        : `${target.company} target added.`;
       break;
     }
     case "GENERATE_SEARCH_PLAN": {

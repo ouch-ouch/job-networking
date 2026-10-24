@@ -1113,3 +1113,25 @@ test("presentation scenes build from real actions, in order, and never run in li
     /only work in Demo mode/,
   );
 });
+
+test("adding a job still works in live mode when AI is unavailable, and says so", async () => {
+  const { services } = harness();
+  services.aiRequest = async () => {
+    throw new Error("Grok (xAI) API key is not configured.");
+  };
+  const state = createDemoState();
+  state.settings.demoMode = false;
+  const result = await applyAction(
+    state,
+    { type: "PARSE_JOB", rawDescription: "Company: Ramp\nRole: Software Engineer Intern\nBuild finance tools in TypeScript." },
+    services,
+  );
+  const added = result.state.targets.at(-1)!;
+  assert.equal(added.company, "Ramp");
+  assert.equal(added.role, "Software Engineer Intern");
+  assert.match(result.message || "", /basic text reading because AI isn't connected/);
+  await assert.rejects(
+    applyAction(state, { type: "PARSE_JOB", rawDescription: "We are hiring someone great to join our growing team soon." }, services),
+    /AI isn't connected .* Add "Company: …" and "Role: …" lines/,
+  );
+});
