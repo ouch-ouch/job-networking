@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import type { z } from 'zod';
+import { mountCoffeeRoutes } from './coffee/routes';
 import type { Config } from './config';
 import { BackendFailure, HTTP_STATUS, toBackendFailure } from './errors';
 import { cancelDiscovery, Semaphore, startDiscovery } from './jobs/runner';
@@ -26,6 +27,8 @@ export type AppDeps = {
   versions: VersionTracker;
   modelStatus: () => ModelStatus | 'checking';
   now?: () => Date;
+  /** Test hook for the coffee-chat /ai/* routes' xAI calls. */
+  coffeeFetch?: typeof fetch;
 };
 
 export function createDeps(cfg: Config, provider: ResearchProvider, now?: () => Date): Omit<AppDeps, 'modelStatus'> {
@@ -72,6 +75,19 @@ function requireModel(deps: AppDeps): void {
 
 export function createApp(deps: AppDeps): Hono {
   const app = new Hono();
+
+  // Coffee-chat routes: /health and /ai/* (no backend token; origin-checked like before).
+  mountCoffeeRoutes(
+    app,
+    {
+      apiKey: deps.cfg.XAI_API_KEY,
+      draftModel: deps.cfg.XAI_DRAFT_MODEL,
+      classifyModel: deps.cfg.XAI_CLASSIFY_MODEL,
+      allowedExtensionIds: deps.cfg.ALLOWED_EXTENSION_IDS,
+      ...(deps.coffeeFetch && { fetch: deps.coffeeFetch }),
+    },
+    () => ({ researchMode: deps.provider.mode }),
+  );
 
   app.use(
     '/v1/*',

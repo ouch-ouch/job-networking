@@ -167,7 +167,9 @@ export function demoResponse(endpoint: string, payload: unknown): unknown {
         background: p.background,
         personal_hook: c.warmPaths[0]
           ? `Your ${c.warmPaths[0].detail} connection stood out to me.`
-          : "",
+          : c.xPost
+            ? `I saw your post on X ("${c.xPost.excerpt.split(/[.!?]/)[0].slice(0, 90)}") and it stuck with me.`
+            : "",
       };
       const filledKeywords: Record<string, string> = {};
       const fill = (source: string) =>

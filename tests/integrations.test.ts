@@ -1,18 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Server } from "node:http";
+import type { AddressInfo } from "node:net";
+import { serve } from "@hono/node-server";
+import { Hono } from "hono";
 import {
-  createApp,
   isAllowedOrigin,
-  type BackendConfig,
-} from "../backend/src/app";
+  mountCoffeeRoutes,
+  type CoffeeConfig as BackendConfig,
+} from "../backend/src/coffee/routes";
 import {
   fillTemplate,
   inputs,
   normalizeOutput,
   outputSchema,
   outputs,
-} from "../backend/src/contracts";
+} from "../backend/src/coffee/contracts";
 import { demoResponse, aiRequest } from "../extension/src/shared/ai";
 import { createDemoState } from "../extension/src/shared/mock";
 import {
@@ -504,15 +506,21 @@ async function withBackend(
   config: BackendConfig,
   run: (url: string) => Promise<void>,
 ) {
-  const server = await new Promise<Server>((resolve) => {
-    const started = createApp(config).listen(0, "127.0.0.1", () =>
-      resolve(started),
+  // The /ai/* routes now live in the main Hono backend; mount just them here.
+  const app = new Hono();
+  mountCoffeeRoutes(app, config);
+  let port = 0;
+  const server = await new Promise<ReturnType<typeof serve>>((resolve) => {
+    const started = serve(
+      { fetch: app.fetch, port: 0, hostname: "127.0.0.1" },
+      (info: AddressInfo) => {
+        port = info.port;
+        resolve(started);
+      },
     );
   });
   try {
-    const address = server.address();
-    assert.ok(address && typeof address !== "string");
-    await run(`http://127.0.0.1:${address.port}`);
+    await run(`http://127.0.0.1:${port}`);
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
@@ -865,4 +873,36 @@ test("calendar creation recovers an existing event after an ambiguous earlier re
   assert.equal(calls[1].method, "GET");
   assert.ok(calls[1].url.endsWith(eventId));
   assert.equal(calls.filter((call) => call.method === "POST").length, 1);
+});
+
+test("X research results map to contacts with their real post and no invented fields", async () => {
+  const { recommendationsToContacts } = await import("../extension/src/shared/x");
+  const target = state.targets[0];
+  const [contact] = recommendationsToContacts(
+    {
+      status: "succeeded",
+      recommendations: [
+        {
+          personId: "p1",
+          handle: "@jlee",
+          displayName: "J Lee",
+          category: "practitioner",
+          affiliation: { claim: "Engineer at Stripe (bio)" },
+          relevance: "Posts about payments APIs.",
+          openingSourceId: "s1",
+          score: { total: 142 },
+          uncertainties: ["Affiliation from bio only"],
+        },
+      ],
+      sources: [{ id: "s1", url: "https://x.com/jlee/status/1", kind: "post", excerpt: "Idempotency keys saved us again." }],
+    },
+    target,
+  );
+  assert.equal(contact.xHandle, "jlee");
+  assert.equal(contact.xUrl, "https://x.com/jlee");
+  assert.equal(contact.title, "Engineer at Stripe (bio)");
+  assert.deepEqual(contact.xPost, { url: "https://x.com/jlee/status/1", excerpt: "Idempotency keys saved us again." });
+  assert.equal(contact.relevance, 100, "scores are clamped to the 0-100 scale the UI uses");
+  assert.equal(contact.email, undefined);
+  assert.match(contact.notes || "", /Unverified: Affiliation from bio only/);
 });

@@ -22,6 +22,7 @@ import {
   Circle,
   Clock3,
   Coffee,
+  AtSign,
   Copy,
   ExternalLink,
   FileText,
@@ -1268,10 +1269,31 @@ function PeopleSearchDialog({
           </select>
         </label>
         <div className="callout search-context">
+          <AtSign size={20} />
+          <p>
+            <strong>Find people on X.</strong> Grok searches X for up to three
+            people tied to this job and shows the real post that makes each one
+            relevant. Live research takes 1 to 3 minutes.
+          </p>
+        </div>
+        <button
+          className="button primary full"
+          disabled={busy || !target}
+          onClick={async () => {
+            if (!target) return;
+            const result = await run({ type: "FIND_ON_X", targetId: target.id });
+            if (result) onClose();
+          }}
+        >
+          {busy ? <LoaderCircle size={16} className="spin" /> : <AtSign size={16} />}
+          {busy ? "Researching on X…" : "Find people on X"}
+        </button>
+        <div className="callout search-context">
           <Sparkles size={20} />
           <p>
-            Grok uses this job’s full description, role, team and company,
-            together with your saved profile.
+            Or search the web and LinkedIn: Grok uses this job’s full
+            description, role, team and company, together with your saved
+            profile.
           </p>
         </div>
         <button
@@ -1547,8 +1569,8 @@ function DraftCard({
       </div>
       <div className="draft-meta">
         <span>
-          {d.channel === "email" ? <Mail size={14} /> : <Linkedin size={14} />}{" "}
-          {d.channel === "email" ? "Email" : "LinkedIn"} ·{" "}
+          {d.channel === "email" ? <Mail size={14} /> : d.channel === "x" ? <AtSign size={14} /> : <Linkedin size={14} />}{" "}
+          {d.channel === "email" ? "Email" : d.channel === "x" ? "X" : "LinkedIn"} ·{" "}
           {d.kind.replaceAll("_", " ")}
         </span>
         {c?.warmPaths[0] && (
@@ -1567,6 +1589,17 @@ function DraftCard({
               : `${Math.round((c?.emailConfidence || 0) * 100)}% · guessed`}
           </Badge>
         </div>
+      )}
+      {d.channel === "x" && c?.xHandle && (
+        <div className="recipient-line">
+          To: <strong>@{c.xHandle}</strong> on X
+          <Badge tone="neutral">You send it yourself</Badge>
+        </div>
+      )}
+      {d.channel === "x" && c?.xPost && (
+        <p className="field-help">
+          Responding to their post: “{c.xPost.excerpt}”
+        </p>
       )}
       {d.channel === "email" && (
         <label className="subject-field">
@@ -1713,6 +1746,34 @@ function DraftCard({
                 >
                   {demo ? "Simulate send" : "Send email"} <Send size={15} />
                 </button>
+              ) : d.channel === "x" ? (
+                <div className="linkedin-actions">
+                  <button
+                    className="button outline compact"
+                    disabled={busy}
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(body);
+                        setCopied(true);
+                        setCopyError("");
+                      } catch {
+                        setCopyError("Select the message text and copy it using your keyboard.");
+                      }
+                      if (c?.xUrl) window.open(c.xUrl, "_blank", "noopener");
+                    }}
+                  >
+                    {copied ? "Copied" : "Copy & open X"} <ExternalLink size={14} />
+                  </button>
+                  <button
+                    className="button primary compact"
+                    disabled={busy}
+                    onClick={() =>
+                      void run({ type: "MARK_SENT", draftId: d.id }, "Marked as sent on X")
+                    }
+                  >
+                    I sent it <Check size={14} />
+                  </button>
+                </div>
               ) : (
                 <div className="linkedin-actions">
                   <button
@@ -2792,6 +2853,21 @@ function ContactDetail({
                   <p>No shared background added yet.</p>
                 )}
                 <p className="muted">{c.reason}</p>
+                {c.xHandle && (
+                  <p>
+                    <a href={c.xUrl} target="_blank" rel="noreferrer">
+                      @{c.xHandle} on X <ExternalLink size={12} />
+                    </a>
+                  </p>
+                )}
+                {c.xPost && (
+                  <blockquote className="muted">
+                    “{c.xPost.excerpt}”{" "}
+                    <a href={c.xPost.url} target="_blank" rel="noreferrer">
+                      View post
+                    </a>
+                  </blockquote>
+                )}
               </div>
               <div>
                 <label>THE OPPORTUNITY</label>

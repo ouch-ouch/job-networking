@@ -1,4 +1,11 @@
 import { serve } from '@hono/node-server';
+
+// One .env for the whole repo, at the root. Variables already set in the shell win.
+try {
+  process.loadEnvFile(new URL('../../.env', import.meta.url));
+} catch {
+  // No root .env: fall back to the shell environment.
+}
 import { loadConfig } from './config';
 import { FixtureResearchProvider } from './provider/fixture';
 import type { ModelStatus } from './provider/types';

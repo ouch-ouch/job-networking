@@ -1,4 +1,5 @@
-export type Channel = "email" | "linkedin_connect" | "linkedin_message";
+// "x": found through Grok X research; you copy the approved message and send it on X yourself.
+export type Channel = "email" | "linkedin_connect" | "linkedin_message" | "x";
 export type Stage =
   | "found"
   | "drafted"
@@ -61,6 +62,10 @@ export type Contact = {
   threadId?: string;
   optedOut?: boolean;
   emailGuesses?: { email: string; confidence: number }[];
+  xHandle?: string;
+  xUrl?: string;
+  /** The person's real post that made them relevant; grounds {{personal_hook}}. */
+  xPost?: { url: string; excerpt: string };
 };
 export type Draft = {
   id: string;
@@ -178,6 +183,7 @@ export type Action =
     }
   | { type: "GENERATE_SEARCH_PLAN"; targetId: string }
   | { type: "SCRAPE_SEARCH"; targetId: string }
+  | { type: "FIND_ON_X"; targetId: string }
   | { type: "GENERATE_DRAFTS"; contactIds: string[] }
   | { type: "UPDATE_DRAFT"; draftId: string; body: string; subject?: string }
   | { type: "REGENERATE_DRAFT"; draftId: string }

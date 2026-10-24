@@ -3,6 +3,11 @@ import { readFile, writeFile } from "node:fs/promises";
 import { config } from "dotenv";
 config();
 const oauthClientId = process.env.GOOGLE_CLIENT_ID || "";
+// The team's pinned PUBLIC key, so every build gets extension ID
+// baeippkikgolnalkpiabdfhidjpploaa (the ID our Google OAuth client is registered for).
+// Not a secret: the private half never goes in the repo.
+const teamPublicKey =
+  "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAiE4JbkMiaRP1QJX0zK8oQu9meHXgldTXJUgg/Ht/zakFLivdXVHQW18djAXQxe/9h3fI7zXx5T9hR1ZbYVU2+r8cEFghlwMDxZ2/g4AMQtcBe2IeeLf/39thWsJOkIfHhWidWQce3euosiyBEfe5cCVc3BuaxXJM5wETIjeO883NdUKdpW/k9QNdwtu0W58ehx0BBejnqDvPoRJXvxr1GzksjmPejBTH6MGeH4VlfYJip0bWoaJZE8rxDtzRMfOHgCpgCOkQCH+TVkglHwFrp6ngwfTHWTlg/JnglJGbONNQW7Tue9BcPeUavLQrKfyW5HaIL7SoQlefw0lhzpkaoQIDAQAB";
 const manifest = {
   manifest_version: 3,
   name: "Coffee Chat Copilot",
@@ -56,10 +61,10 @@ const manifest = {
         },
       }
     : {}),
-  ...(process.env.EXTENSION_PUBLIC_KEY
-    ? { key: process.env.EXTENSION_PUBLIC_KEY }
-    : {}),
+  key: process.env.EXTENSION_PUBLIC_KEY || teamPublicKey,
 };
+// Same shared token the side panel gets from vite.config.ts; actions run in the worker.
+const define = { __BACKEND_TOKEN__: JSON.stringify(process.env.BACKEND_TOKEN || "") };
 await writeFile("dist/manifest.json", JSON.stringify(manifest, null, 2));
 await build({
   entryPoints: ["extension/src/background/index.ts"],
@@ -69,6 +74,7 @@ await build({
   platform: "browser",
   target: "chrome116",
   sourcemap: true,
+  define,
 });
 await build({
   entryPoints: ["extension/src/content/content-script.ts"],
@@ -78,6 +84,7 @@ await build({
   platform: "browser",
   target: "chrome116",
   sourcemap: true,
+  define,
 });
 console.log(
   `Extension ready in dist/. Google OAuth: ${oauthClientId ? "configured" : "not configured (demo mode ready)"}`,

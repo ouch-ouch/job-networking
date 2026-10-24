@@ -64,6 +64,7 @@ function harness() {
     fillLinkedIn: async () => {
       calls.linkedin++;
     },
+    discoverOnX: async () => [],
   };
   return { services, calls };
 }
@@ -969,4 +970,71 @@ test("demo search plans are deterministic, grounded query ideas with no network 
     assert.deepEqual(first.state, state);
     assert.equal(fetches, 0);
   } finally { globalThis.fetch = originalFetch; }
+});
+
+test("X: demo discovery adds labeled people with evidence; drafts use the template and only send by hand", async () => {
+  const { services, calls } = harness();
+  let state = createDemoState();
+  const targetId = state.targets[0].id;
+  let result = await applyAction(state, { type: "FIND_ON_X", targetId }, services);
+  state = result.state;
+  const found = state.contacts.filter((c) => c.xHandle);
+  assert.equal(found.length, 3);
+  assert.match(result.message || "", /Demo mode: no X search ran/);
+  for (const c of found) {
+    assert.ok(c.id.startsWith("demo_"), "demo X people must be marked fictional");
+    assert.ok(c.xPost?.excerpt, "each person carries the post that made them relevant");
+  }
+  // Running it again does not duplicate people.
+  state = (await applyAction(state, { type: "FIND_ON_X", targetId }, services)).state;
+  assert.equal(state.contacts.filter((c) => c.xHandle).length, 3);
+
+  const person = found[0];
+  state = (await applyAction(state, { type: "GENERATE_DRAFTS", contactIds: [person.id] }, services)).state;
+  const draft = state.drafts.find((d) => d.contactId === person.id)!;
+  assert.equal(draft.channel, "x");
+  assert.ok(!/no follow-ups/.test(draft.body), "the email opt-out line is not added to X messages");
+  await assert.rejects(applyAction(state, { type: "MARK_SENT", draftId: draft.id }, services), /Approve this exact draft/);
+  await assert.rejects(
+    applyAction(state, { type: "FILL_LINKEDIN", draftId: draft.id }, services),
+    /send it on X yourself/,
+  );
+  state = (await applyAction(state, { type: "APPROVE_DRAFT", draftId: draft.id }, services)).state;
+  result = await applyAction(state, { type: "MARK_SENT", draftId: draft.id }, services);
+  assert.match(result.message || "", /Demo X send simulated/);
+  assert.equal(result.state.drafts.find((d) => d.id === draft.id)!.status, "sent");
+  assert.equal(calls.emails + calls.linkedin, 0, "nothing was sent automatically");
+});
+
+test("X: live discovery goes through the backend service and skips people already found", async () => {
+  const { services } = harness();
+  const state = createDemoState();
+  state.settings.demoMode = false;
+  const target = state.targets[0];
+  const person = {
+    id: "contact_x_ana_real",
+    targetId: target.id,
+    name: "Ana Real",
+    title: "Engineer",
+    company: target.company,
+    xHandle: "ana_real",
+    xUrl: "https://x.com/ana_real",
+    warmPaths: [],
+    relevance: 77,
+    reason: "Posts about the team's work",
+    stage: "found" as const,
+    followUpCount: 0,
+  };
+  let asked = 0;
+  services.discoverOnX = async (t, _profile, backendUrl) => {
+    asked++;
+    assert.equal(t.id, target.id);
+    assert.equal(backendUrl, state.settings.backendUrl);
+    return [person];
+  };
+  const first = await applyAction(state, { type: "FIND_ON_X", targetId: target.id }, services);
+  assert.match(first.message || "", /1 people found on X/);
+  const second = await applyAction(first.state, { type: "FIND_ON_X", targetId: target.id }, services);
+  assert.match(second.message || "", /already on this target/);
+  assert.equal(asked, 2);
 });

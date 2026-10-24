@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "zod/v4";
 
 const text = z.string().max(20_000);
 const short = z.string().max(1000);
@@ -22,7 +22,7 @@ const profile = z.object({
 const template = z.object({
   id: short.optional(),
   name: short.optional(),
-  channel: z.enum(["email", "linkedin_connect", "linkedin_message"]),
+  channel: z.enum(["email", "linkedin_connect", "linkedin_message", "x"]),
   subject: short.optional(),
   body: text.min(1),
 });
@@ -65,7 +65,7 @@ const draft = z
     subject: short.optional(),
     body: text.min(1),
     channel: z
-      .enum(["email", "linkedin_connect", "linkedin_message"])
+      .enum(["email", "linkedin_connect", "linkedin_message", "x"])
       .optional(),
   })
   .passthrough();

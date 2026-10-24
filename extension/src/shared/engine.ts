@@ -18,6 +18,7 @@ import { connectGoogle } from "../google/auth";
 import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
 import { scrapeSearch, fillLinkedIn } from "../content/index";
+import { discoverOnX } from "./x";
 
 const DAY = 86_400_000;
 const OPT_OUT = "If you'd prefer no follow-ups, just let me know.";
@@ -40,6 +41,7 @@ const defaultServices = {
   updateMeetingDescription,
   scrapeSearch,
   fillLinkedIn,
+  discoverOnX,
 };
 export type EngineServices = typeof defaultServices;
 
@@ -86,6 +88,51 @@ function resetUsage(state: AppState, now: number): void {
   if (state.usage.date !== today(now))
     state.usage = { date: today(now), emails: 0, profiles: 0 };
 }
+/** Fictional people for demo mode's "Find people on X". No X search runs. */
+function demoXContacts(target: Target): Contact[] {
+  const people = [
+    {
+      handle: "devon_builds_demo",
+      name: "Devon Reyes",
+      title: `Engineer at ${target.company} (per their X bio)`,
+      reason: `Posts about the systems behind ${target.team || target.role} and answers student questions.`,
+      post: "Hot take: the best intern projects are the boring reliability ones. You learn the whole stack.",
+      relevance: 88,
+    },
+    {
+      handle: "priya_recruits_demo",
+      name: "Priya Shah",
+      title: `University recruiting at ${target.company} (per their X bio)`,
+      reason: `Shared that ${target.company} is hiring early-career ${target.role} candidates this season.`,
+      post: "Early-career apps are open! Tip: a short note about a real project beats a perfect cover letter.",
+      relevance: 81,
+    },
+    {
+      handle: "sam_ships_demo",
+      name: "Sam Okafor",
+      title: `Former ${target.company} engineer (per their X posts)`,
+      reason: "Writes threads about breaking into the industry from a non-target background.",
+      post: "Thread: 5 things I wish I knew before my first engineering internship.",
+      relevance: 70,
+    },
+  ];
+  return people.map((p) => ({
+    id: id("demo_contact"),
+    targetId: target.id,
+    name: p.name,
+    title: p.title,
+    company: target.company,
+    xHandle: p.handle,
+    xUrl: `https://x.com/${p.handle}`,
+    xPost: { url: `https://x.com/${p.handle}`, excerpt: p.post },
+    warmPaths: [],
+    relevance: p.relevance,
+    reason: p.reason,
+    stage: "found" as const,
+    followUpCount: 0,
+  }));
+}
+
 function isDemoContact(contact: Contact): boolean {
   return (
     contact.id.startsWith("demo_") ||
@@ -143,6 +190,8 @@ export function validateSend(state: AppState, draft: Draft): Contact {
     throw new Error(
       "LinkedIn connection notes must be 300 characters or fewer.",
     );
+  if (draft.channel === "x" && !contact.xHandle)
+    throw new Error("This contact has no X handle. Add one or use another channel.");
   if (draft.channel === "email") {
     if (!contact.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email))
       throw new Error("Add a valid email address first.");
@@ -746,6 +795,30 @@ export async function applyAction(
       }
       break;
     }
+    case "FIND_ON_X": {
+      const target = state.targets.find((item) => item.id === action.targetId);
+      if (!target) throw new Error("Select a target job first.");
+      const found = state.settings.demoMode
+        ? demoXContacts(target)
+        : await services.discoverOnX(target, state.profile, state.settings.backendUrl);
+      const additions = found.filter(
+        (person) =>
+          !state.contacts.some(
+            (existing) => existing.targetId === target.id && existing.xHandle === person.xHandle,
+          ),
+      );
+      state.contacts.push(...additions);
+      for (const contact of additions)
+        event(state, contact.id, "contact_added", `${contact.name} (@${contact.xHandle}) found on X by Grok research.`);
+      message = state.settings.demoMode
+        ? `${additions.length} fictional X people added. Demo mode: no X search ran.`
+        : additions.length
+          ? `${additions.length} people found on X, each with the post that makes them relevant.`
+          : found.length
+            ? "Those people are already on this target."
+            : "Grok found no one on X with real evidence for this job. Try a broader posting.";
+      break;
+    }
     case "GENERATE_DRAFTS": {
       if (!state.profile.name.trim())
         throw new Error(
@@ -769,12 +842,13 @@ export async function applyAction(
           body: string;
           filledKeywords: Record<string, string>;
         }>("/ai/fill-template", {
-          template: state.template,
+          template: contact.xHandle ? { ...state.template, channel: "x", subject: undefined } : state.template,
           profile: state.profile,
           target: targetFor(state, contact),
           contact,
         });
-        addDraft(state, contact, "initial", output);
+        // People found on X get an X draft; everyone else uses the template's channel.
+        addDraft(state, contact, "initial", output, contact.xHandle ? "x" : state.template.channel);
         count++;
       }
       message = count
@@ -999,6 +1073,7 @@ export async function applyAction(
     case "FILL_LINKEDIN": {
       const draft = requireDraft(state, action.draftId);
       if (draft.channel === "email") throw new Error("This draft is an email.");
+      if (draft.channel === "x") throw new Error("Copy this message and send it on X yourself.");
       const contact = validateSend(state, draft);
       if (!state.settings.demoMode) await services.fillLinkedIn(contact, draft);
       message = state.settings.demoMode
@@ -1012,9 +1087,10 @@ export async function applyAction(
         throw new Error("Emails are sent through the approved Gmail action.");
       const contact = validateSend(state, draft);
       markSent(state, draft, contact, now);
+      const where = draft.channel === "x" ? "X" : "LinkedIn";
       message = state.settings.demoMode
-        ? "Demo LinkedIn send simulated. No message was sent."
-        : "Your manual LinkedIn send was recorded.";
+        ? `Demo ${where} send simulated. No message was sent.`
+        : `Your manual ${where} send was recorded.`;
       break;
     }
     case "POLL_REPLIES":
