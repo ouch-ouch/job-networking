@@ -55,7 +55,7 @@ Mock state is saved to localStorage. Setup → "Reset mock data" restores it.
 
 ## Still on you (needs your accounts, so I couldn't click through these)
 
-### 1. Snowflake (hand-off to C due at 0:25)
+### 1. Snowflake (hand-off to C due at 0:25): ✅ done, token sent
 No install needed: Snowflake runs in the browser, and you only paste and click Run.
 1. Ask the organizers whether there's a hackathon Snowflake account. If not, sign up at signup.snowflake.com (Enterprise edition, AWS, a US region) and verify your email. The trial user is ACCOUNTADMIN automatically.
 2. Log in → **+ Create** (top left) → **SQL Worksheet**.
@@ -79,7 +79,7 @@ curl -X POST "$SNOWFLAKE_ACCOUNT_URL/api/v2/cortex/v1/chat/completions" \
   -d '{"model":"grok-4.7","messages":[{"role":"user","content":"say hi"}]}'
 ```
 
-### 2. Google Cloud OAuth client (hand-off to B due at 0:20)
+### 2. Google Cloud OAuth client (hand-off to B due at 0:20): ✅ done
 1. console.cloud.google.com → new project `coffee-chat-copilot`.
 2. APIs & Services → Library → enable **Gmail API** and **Google Calendar API**.
 3. Google Auth Platform (OAuth consent screen):
