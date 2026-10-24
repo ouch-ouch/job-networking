@@ -168,28 +168,9 @@ ALTER USER COFFEE_CHAT_SVC SET AUTHENTICATION POLICY COFFEE_CHAT.APP.PAT_ANY_NET
 -- CREATE NETWORK POLICY IF NOT EXISTS COFFEE_CHAT_ALLOW_ALL ALLOWED_IP_LIST = ('0.0.0.0/0');
 -- ALTER USER COFFEE_CHAT_SVC SET NETWORK_POLICY = COFFEE_CHAT_ALLOW_ALL;
 
--- 6. Smoke tests, run as the app role so they prove the grants work.
---    If any of these fails, "Run All" stops here with the error and no token is made yet.
-USE ROLE COFFEE_CHAT_ROLE;
-USE WAREHOUSE COFFEE_CHAT_WH;
-USE SCHEMA COFFEE_CHAT.APP;
-
-SELECT AI_COMPLETE('grok-4.7', 'say hi') AS grok;
--- If that errors with "model not available": SPEC fallback, same endpoint.
--- SELECT AI_COMPLETE('claude-sonnet-4-6', 'say hi') AS fallback;
-
--- The two Snowflake AI calls the spec says we can never cut:
-SELECT AI_EXTRACT(
-  text => 'Ledgerly, Software Engineer Intern, Payments Platform. New York, NY. We use TypeScript, Go and SQL.',
-  responseFormat => ['company', 'role', 'team', 'location', 'skills']
-) AS parsed_job;
-
-SELECT AI_CLASSIFY(
-  'Sure, Thursday at 3?',
-  ['interested', 'proposes_time', 'not_interested', 'referral', 'ooo']
-) AS reply_intent;
-
-SELECT AI_SENTIMENT('Happy to chat! Grab any slot on my calendar this week.') AS warmth;
+-- 6. AI smoke tests live in smoke-tests.sql, run one statement at a time, so an
+--    AI function that isn't available on the account (e.g. trial accounts can't
+--    use AI_COMPLETE) doesn't stop setup before the token is made.
 
 -- 7. The token. Kept LAST on purpose: Snowsight's "Run All" only shows the final
 --    statement's result, so this is the row you'll see. Its token_secret is shown ONCE:

@@ -67,7 +67,9 @@ No install needed: Snowflake runs in the browser, and you only paste and click R
    - `SNOWFLAKE_ACCOUNT_URL` (bottom-left account menu → your account → copy the account URL)
    - `SNOWFLAKE_PAT`
    - the names `COFFEE_CHAT_ROLE` / `COFFEE_CHAT_WH` / `COFFEE_CHAT.APP`
-- If `AI_COMPLETE('grok-4.7', ...)` fails, tell C to switch to `claude-sonnet-4-6` (§6b fallback).
+- Then open `snowflake/smoke-tests.sql`, run each SELECT on its own (cursor inside it, Ctrl+Enter), and note which work.
+- **Known blocker:** trial accounts get "AI function ... is not available for trial accounts" on `AI_COMPLETE`, which is how Grok is called. Ask the organizers for a hackathon Snowflake account (or credits). Tell C right away, because the Grok loop is on the spec's never-cut list.
+- If `AI_COMPLETE('grok-4.7', ...)` fails for any other reason, tell C to switch to `claude-sonnet-4-6` (§6b fallback).
 - If the script's step 5 (authentication policy) errors, use the commented-out network-policy fallback right below it.
 
 C's first REST smoke test:
