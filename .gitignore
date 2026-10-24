@@ -26,3 +26,6 @@ build/
 
 # Local account setup diagnostics
 docs/screenshots/google-test-user-setup.png
+
+# Keys
+*.pem
