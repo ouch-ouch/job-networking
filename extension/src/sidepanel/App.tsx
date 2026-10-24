@@ -664,10 +664,10 @@ export default function App() {
                                   <span className="warm-tag">
                                     <span className="warm-dot" />
                                     {c.warmPaths[0].type === "alumni"
-                                      ? `${s.profile.school || "School"} alum`
+                                      ? c.linkedinEvidence ? "Shared school" : `${s.profile.school || "School"} alum`
                                       : c.warmPaths[0].type ===
                                           "mutual_connection"
-                                        ? "2nd connection"
+                                        ? c.connectionDegree === 2 ? "2nd connection" : "Mutual connection"
                                         : "Shared background"}
                                   </span>
                                   <small>{c.reason}</small>
@@ -1255,6 +1255,14 @@ function PeopleSearchDialog({
   const [importing, setImporting] = useState(false);
   const [importAttempted, setImportAttempted] = useState(false);
   const [importFeedback, setImportFeedback] = useState("");
+  const [importedPeople, setImportedPeople] = useState<Array<
+    Pick<Contact, "id" | "name" | "title" | "linkedinUrl" | "location">
+  >>([]);
+  useEffect(() => {
+    setImportedPeople([]);
+    setImportFeedback("");
+    setImportAttempted(false);
+  }, [target?.id]);
   const importError = useContext(DialogErrorContext);
   useEffect(() => {
     const receive = (payload: unknown) => {
@@ -1572,7 +1580,7 @@ function PeopleSearchDialog({
       <div className="dialog-footer people-import-footer">
         <p className="import-source-hint">
           {state.settings.demoMode
-            ? "Demo import uses fictional contacts. No LinkedIn page is read."
+            ? "Demo mode is on: this imports fictional contacts. Turn off Demo mode in Settings & profile to import real LinkedIn people."
             : !isExtension
               ? "Live import requires Coffee Chat Copilot’s Chrome extension side panel. This browser preview supports adding people manually."
               : checkingPage
@@ -1592,6 +1600,23 @@ function PeopleSearchDialog({
         {!importing && importFeedback && (
           <p className="import-feedback" role="status">{importFeedback}</p>
         )}
+        {!importing && importedPeople.length > 0 && (
+          <div className="imported-people">
+            <strong>Read from your LinkedIn results</strong>
+            <ul>
+              {importedPeople.map((person) => (
+                <li key={person.id}>
+                  <a href={cleanLink(person.linkedinUrl)} target="_blank" rel="noreferrer">
+                    {person.name} <ExternalLink size={11} />
+                  </a>
+                  {person.title && <span>{person.title}</span>}
+                  {person.location && <small>{person.location}</small>}
+                </li>
+              ))}
+            </ul>
+            <button className="button outline compact" onClick={onClose}>View contacts</button>
+          </div>
+        )}
         <div className="people-import-actions">
         <button className="button subtle" onClick={onAddManually}>
           Add manually
@@ -1605,13 +1630,18 @@ function PeopleSearchDialog({
             setResearchAttempted(false);
             setImportAttempted(true);
             setImportFeedback("");
+            setImportedPeople([]);
             setImporting(true);
             try {
               const result = await run({ type: "SCRAPE_SEARCH", targetId: target.id });
               if (result) {
                 setImportFeedback(result.message || "Import complete.");
-                const imported = (result.data as { imported?: number } | undefined)?.imported;
-                if (imported && imported > 0) onClose();
+                const outcome = result.data as {
+                  imported?: number; people?: typeof importedPeople;
+                } | undefined;
+                if (state.settings.demoMode) {
+                  if (outcome?.imported && outcome.imported > 0) onClose();
+                } else setImportedPeople(outcome?.people || []);
               }
             } finally {
               setImporting(false);
@@ -3004,9 +3034,8 @@ function ContactDetail({
         <Avatar name={c.name} />
         <div>
           <h2>{c.name}</h2>
-          <p>
-            {c.title} at {c.company}
-          </p>
+          <p>{c.linkedinEvidence ? c.title || "Headline not listed" : [c.title, c.company].filter(Boolean).join(" · ")}</p>
+          {c.location && <p className="muted">{c.location}</p>}
         </div>
         <Badge
           tone={
@@ -3030,6 +3059,22 @@ function ContactDetail({
       <div className="dialog-body contact-detail-body">
         {tab === "overview" && (
           <>
+            {c.linkedinEvidence && (
+              <section className="linkedin-evidence">
+                <h3><Linkedin size={16} /> Imported from LinkedIn results</h3>
+                <dl>
+                  <dt>Headline</dt><dd>{c.linkedinEvidence.headline || "Not listed on the results page"}</dd>
+                  {c.linkedinEvidence.location && <><dt>Location</dt><dd>{c.linkedinEvidence.location}</dd></>}
+                  {c.linkedinEvidence.education && <><dt>Education</dt><dd>{c.linkedinEvidence.education}</dd></>}
+                  {c.linkedinEvidence.mutualConnections && <><dt>Mutual connections</dt><dd>{c.linkedinEvidence.mutualConnections}</dd></>}
+                </dl>
+                <p className="muted">Read {new Date(c.linkedinEvidence.capturedAt).toLocaleString()}</p>
+                {cleanLink(c.linkedinEvidence.sourceUrl) && (
+                  <a href={cleanLink(c.linkedinEvidence.sourceUrl)} target="_blank" rel="noreferrer">View source search <ExternalLink size={12} /></a>
+                )}
+                <details><summary>Text read from the page</summary><pre>{c.linkedinEvidence.sourceText}</pre></details>
+              </section>
+            )}
             <div className="detail-grid">
               <div>
                 <label>YOUR WARM PATH</label>
@@ -3073,7 +3118,9 @@ function ContactDetail({
               <span>
                 {c.email || "No email address"}
                 <small>
-                  {c.emailVerified
+                  {!c.email
+                    ? "Not listed on the page. Add and confirm an address to use email."
+                    : c.emailVerified
                     ? "Confirmed by you"
                     : `Guessed address · ${Math.round((c.emailConfidence || 0) * 100)}% confidence`}
                 </small>

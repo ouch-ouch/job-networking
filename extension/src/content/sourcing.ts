@@ -231,6 +231,11 @@ export type SearchResultEvidence = {
   degreeText?: string;
   /** Only pass text from a visible education field or an explicitly labeled alumni summary. */
   education?: string;
+  location?: string;
+  /** Only an explicitly labeled mutual-connection block, never generated prose. */
+  mutualConnections?: string;
+  sourceText?: string;
+  sourceUrl?: string;
 };
 
 function hasSchool(education: string, school: string): boolean {
@@ -261,13 +266,15 @@ export function contactFromSearchResult(
   )
     return undefined;
   const title = compact(evidence.title);
-  const company = compact(
-    evidence.company ||
-      title
-        .split(/\s+(?:at|@)\s+/i)
-        .slice(1)
-        .join(" at "),
-  );
+  const employment = title.match(/(?:\bat\s+|@\s*)([^|•·;]+)/i);
+  const employmentPrefix = employment ? title.slice(0, employment.index) : "";
+  const company = compact(evidence.company || (
+    !/\b(?:former|previously|ex[- ]|looking|seeking|aspiring|opportunit\w*|interested|applying|student|candidate|incoming|future)\b|\bopen to\b/i.test(employmentPrefix)
+      ? employment?.[1] || ""
+      : ""
+  ));
+  const location = compact(evidence.location || "");
+  const mutualConnections = compact(evidence.mutualConnections || "");
   const degreeMatch = evidence.degreeText?.match(
     /\b([123])(?:st|nd|rd)(?:\+)?\b/i,
   );
@@ -281,7 +288,10 @@ export function contactFromSearchResult(
       detail: `${profile.school} listed in visible education / alumni information`,
     });
   }
-  const emailGuesses = target.domain ? guessEmails(name, target.domain) : [];
+  if (mutualConnections) warmPaths.push({ type: "mutual_connection", detail: mutualConnections });
+  const companyKey = normalized(company), targetCompanyKey = normalized(target.company);
+  const emailGuesses = target.domain && companyKey && targetCompanyKey && companyKey === targetCompanyKey
+    ? guessEmails(name, target.domain) : [];
   return rankContact(
     {
       id: crypto.randomUUID(),
@@ -290,6 +300,16 @@ export function contactFromSearchResult(
       title,
       company,
       linkedinUrl,
+      ...(location ? { location } : {}),
+      linkedinEvidence: {
+        headline: title,
+        ...(location ? { location } : {}),
+        ...(evidence.education ? { education: compact(evidence.education) } : {}),
+        ...(mutualConnections ? { mutualConnections } : {}),
+        sourceText: evidence.sourceText?.trim() || [name, evidence.degreeText, title, location].filter(Boolean).join("\n"),
+        ...(evidence.sourceUrl ? { sourceUrl: evidence.sourceUrl } : {}),
+        capturedAt: Date.now(),
+      },
       connectionDegree,
       warmPaths,
       relevance: 0,

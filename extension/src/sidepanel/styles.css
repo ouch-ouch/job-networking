@@ -1995,6 +1995,48 @@ hr {
   justify-content: space-between;
   gap: 12px;
 }
+.imported-people {
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.imported-people ul {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 12px;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.imported-people li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.imported-people a { font-weight: 600; }
+.imported-people span, .imported-people small {
+  display: block;
+  margin-top: 4px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.imported-people small { color: #637469; }
+.linkedin-evidence {
+  padding: 15px;
+  margin-bottom: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--sage);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.linkedin-evidence h3 { display: flex; gap: 7px; align-items: center; font-size: 13px; }
+.linkedin-evidence dl { margin: 12px 0; }
+.linkedin-evidence dt { font-weight: 600; margin-top: 8px; }
+.linkedin-evidence dd { margin: 0; white-space: pre-wrap; }
+.linkedin-evidence summary { cursor: pointer; margin-top: 10px; }
+.linkedin-evidence pre { white-space: pre-wrap; font: inherit; margin-top: 8px; }
 .import-source-hint {
   color: #637469;
   font-size: 11px;

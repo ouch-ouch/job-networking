@@ -7,7 +7,7 @@ import {
   type EngineServices,
 } from "../extension/src/shared/engine";
 import { createDemoState } from "../extension/src/shared/mock";
-import type { AppState } from "../extension/src/shared/types";
+import type { AppState, Contact } from "../extension/src/shared/types";
 import { getState, saveState } from "../extension/src/shared/storage";
 
 function harness() {
@@ -1055,13 +1055,14 @@ test("live search import reports new and already-added people, including repeate
   services.scrapeSearch = async () => [duplicate, incoming];
   const originalDrafts = structuredClone(state.drafts);
   const first = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
-  assert.deepEqual(first.data, { imported: 1, scanned: 2, alreadyAdded: 1 });
+  const visiblePeople = [duplicate, incoming].map(person => ({ id: person.id, name: person.name, title: person.title, linkedinUrl: person.linkedinUrl }));
+  assert.deepEqual(first.data, { imported: 1, scanned: 2, alreadyAdded: 1, refreshed: 0, people: visiblePeople });
   assert.equal(first.state.contacts.length, state.contacts.length + 1);
   assert.equal(first.state.usage.profiles, state.usage.profiles + 1);
   assert.deepEqual(first.state.drafts, originalDrafts);
   state = first.state;
   const repeated = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
-  assert.deepEqual(repeated.data, { imported: 0, scanned: 2, alreadyAdded: 2 });
+  assert.deepEqual(repeated.data, { imported: 0, scanned: 2, alreadyAdded: 2, refreshed: 0, people: visiblePeople });
   assert.match(repeated.message!, /All 2 visible people are already added to this target/);
   assert.match(repeated.message!, /Open another results page/);
   assert.equal(repeated.state.contacts.length, state.contacts.length);
@@ -1084,7 +1085,13 @@ test("live imports exceed 20 people despite high usage and an old saved profile 
     linkedinUrl: `https://www.linkedin.com/in/new-person-${index}/`,
   }));
   const result = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
-  assert.deepEqual(result.data, { imported: 35, scanned: 35, alreadyAdded: 0 });
+  assert.deepEqual(result.data, {
+    imported: 35, scanned: 35, alreadyAdded: 0, refreshed: 0,
+    people: Array.from({ length: 35 }, (_, index) => ({
+      id: `new-person-${index}`, name: `New Person ${index}`, title: state.contacts[0].title,
+      linkedinUrl: `https://www.linkedin.com/in/new-person-${index}/`,
+    })),
+  });
   assert.equal(result.state.usage.profiles, 1035);
   assert.equal(result.state.contacts.length, state.contacts.length + 35);
   assert.doesNotMatch(result.message!, /Daily (?:import|profile) limit/);
@@ -1144,4 +1151,126 @@ test("X: cancellation with zero contacts stays cancellation feedback instead of 
   assert.doesNotMatch(result.message!, /Grok found no one/);
   assert.equal(result.state.contacts.length, state.contacts.length);
   assert.equal(calls.emails + calls.linkedin + calls.calendar, 0);
+});
+
+
+test("LinkedIn reimports refresh observed details using canonical URLs without changing outreach or manual fields", async () => {
+  const { services, calls } = harness();
+  const state = liveState();
+  const saved = state.contacts[0];
+  saved.linkedinUrl = "https://www.linkedin.com/in/observed-person/?trk=old";
+  saved.name = "Old display name";
+  saved.title = "Old headline";
+  saved.company = "Old Company";
+  saved.location = "Old Location";
+  saved.connectionDegree = 3;
+  saved.warmPaths = [{ type: "past_employer", detail: "Manually entered shared employer" }];
+  saved.notes = "My private conversation notes";
+  saved.email = "confirmed@real-company.com";
+  saved.emailVerified = true;
+  saved.emailConfidence = 1;
+  saved.stage = "scheduled";
+  saved.followUpCount = 2;
+  saved.nextActionAt = Date.now() + 1000;
+  saved.threadId = "original-thread";
+  saved.linkedinEvidence = { headline: "Old headline", sourceText: "Old visible card", capturedAt: 100 };
+  state.drafts[0].status = "approved";
+  const originalDrafts = structuredClone(state.drafts);
+  const originalMeetings = structuredClone(state.meetings);
+  const observed: Contact = {
+    ...saved, id: "fresh-page-id", linkedinUrl: "https://linkedin.com/in/observed-person#new",
+    name: "Actual Visible Name", title: "Engineering Manager at Real Company", company: "Real Company",
+    location: "New York Metropolitan Area", connectionDegree: 2,
+    warmPaths: [{ type: "alumni", detail: "Example University in visible education" }],
+    notes: "Incoming page notes must not overwrite mine", email: "guessed@wrong-company.com",
+    emailVerified: false, emailConfidence: 0.3, stage: "found", followUpCount: 0,
+    nextActionAt: undefined, threadId: undefined,
+    linkedinEvidence: {
+      headline: "Engineering Manager at Real Company", location: "New York Metropolitan Area",
+      education: "Example University", mutualConnections: "A visible mutual connection",
+      sourceText: "Actual Visible Name\nEngineering Manager at Real Company\nNew York Metropolitan Area",
+      sourceUrl: "https://www.linkedin.com/search/results/people/?keywords=company", capturedAt: 200,
+    },
+  };
+  services.scrapeSearch = async () => [observed];
+  const result = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services);
+  const updated = result.state.contacts.find(contact => contact.id === saved.id)!;
+  assert.equal(result.state.contacts.length, state.contacts.length);
+  assert.deepEqual(result.data, {
+    imported: 0, scanned: 1, alreadyAdded: 1, refreshed: 1,
+    people: [{ id: saved.id, name: observed.name, title: observed.title, linkedinUrl: "https://www.linkedin.com/in/observed-person/", location: observed.location }],
+  });
+  assert.match(result.message!, /Updated visible LinkedIn details/);
+  assert.equal(updated.id, saved.id);
+  assert.equal(updated.name, observed.name);
+  assert.equal(updated.title, observed.title);
+  assert.equal(updated.company, observed.company);
+  assert.equal(updated.location, observed.location);
+  assert.equal(updated.connectionDegree, 2);
+  assert.deepEqual(updated.linkedinEvidence, observed.linkedinEvidence);
+  assert.ok(saved.warmPaths.every(path => updated.warmPaths.some(updatedPath => updatedPath.type === path.type && updatedPath.detail === path.detail)));
+  assert.ok(observed.warmPaths.every(path => updated.warmPaths.some(updatedPath => updatedPath.type === path.type && updatedPath.detail === path.detail)));
+  assert.match(updated.reason, /Example University in visible education/);
+  assert.notEqual(updated.reason, saved.reason);
+  assert.notEqual(updated.relevance, saved.relevance);
+  for (const field of ["notes", "email", "emailVerified", "emailConfidence", "stage", "followUpCount", "nextActionAt", "threadId", "linkedinUrl"] as const) assert.deepEqual(updated[field], saved[field]);
+  assert.deepEqual(result.state.drafts, originalDrafts);
+  assert.deepEqual(result.state.meetings, originalMeetings);
+  assert.equal(result.state.usage.profiles, state.usage.profiles);
+  assert.equal(calls.emails + calls.linkedin + calls.calendar + calls.ai, 0);
+});
+
+test("LinkedIn reimports keep known details when new visible fields are empty and do not count timestamp-only refreshes", async () => {
+  const { services } = harness();
+  const state = liveState();
+  const saved = state.contacts[0];
+  saved.linkedinUrl = "https://www.linkedin.com/in/known-person/";
+  saved.location = "Known Location";
+  saved.connectionDegree = 2;
+  saved.warmPaths = [{ type: "shared_org", detail: "A manually supplied club" }];
+  saved.linkedinEvidence = { headline: saved.title, location: saved.location, education: "Known education", sourceText: "Known visible text", capturedAt: 100 };
+  const empty: Contact = { ...saved, id: "new-reader-id", name: " ", title: "", company: "", location: "", connectionDegree: undefined, warmPaths: [], linkedinEvidence: { headline: " ", sourceText: "", capturedAt: 200 } };
+  services.scrapeSearch = async () => [empty];
+  const unchanged = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services);
+  assert.deepEqual(unchanged.state.contacts[0], saved);
+  assert.equal((unchanged.data as { refreshed: number }).refreshed, 0);
+  assert.match(unchanged.message!, /visible details are unchanged/);
+  services.scrapeSearch = async () => [{ ...saved, id: "another-reader-id", linkedinEvidence: { ...saved.linkedinEvidence!, capturedAt: 300 } }];
+  const timestampOnly = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services);
+  assert.equal((timestampOnly.data as { refreshed: number }).refreshed, 0);
+  assert.equal(timestampOnly.state.contacts[0].linkedinEvidence!.capturedAt, 300);
+  assert.deepEqual(timestampOnly.state.contacts[0].warmPaths, saved.warmPaths);
+});
+
+test("LinkedIn canonical matching keeps the same person separate across different target jobs", async () => {
+  const { services } = harness();
+  const state = liveState();
+  const saved = state.contacts[0];
+  saved.linkedinUrl = "https://www.linkedin.com/in/same-person/";
+  const otherTarget = { ...state.targets[0], id: "other-target" };
+  state.targets.push(otherTarget);
+  services.scrapeSearch = async () => [{ ...saved, id: "new-target-person", targetId: otherTarget.id, name: "Observed Person", linkedinUrl: "https://linkedin.com/in/same-person/?tracking=new" }];
+  const result = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: otherTarget.id }, services);
+  assert.equal((result.data as { imported: number; refreshed: number }).imported, 1);
+  assert.equal((result.data as { imported: number; refreshed: number }).refreshed, 0);
+  assert.deepEqual(result.state.contacts[0], saved);
+  assert.equal(result.state.contacts.at(-1)!.targetId, otherTarget.id);
+  assert.equal(result.state.contacts.at(-1)!.linkedinUrl, "https://www.linkedin.com/in/same-person/");
+});
+
+
+test("LinkedIn import returns one visible person when duplicate cards resolve to the same canonical profile", async () => {
+  const { services } = harness();
+  const state = liveState();
+  const person = { ...state.contacts[0], id: "new-unique-person", name: "One Visible Person", linkedinUrl: "https://www.linkedin.com/in/one-visible-person/" };
+  services.scrapeSearch = async () => [person, { ...person, id: "duplicate-reader-id", linkedinUrl: "https://linkedin.com/in/one-visible-person?trk=duplicate" }];
+  const result = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services);
+  const data = result.data as { imported: number; scanned: number; people: { id: string; name: string; linkedinUrl: string }[] };
+  assert.equal(data.imported, 1);
+  assert.equal(data.scanned, 2);
+  assert.equal(data.people.length, 1);
+  assert.equal(data.people[0].id, person.id);
+  assert.equal(data.people[0].name, person.name);
+  assert.equal(data.people[0].linkedinUrl, person.linkedinUrl);
+  assert.equal(result.state.contacts.filter(contact => contact.id === person.id).length, 1);
 });

@@ -19,6 +19,7 @@ import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
 import { scrapeSearch, fillLinkedIn } from "../content/index";
 import { discoverOnX } from "./x";
+import { canonicalLinkedInProfile, rankContact } from "../content/sourcing";
 
 const DAY = 86_400_000;
 const OPT_OUT = "If you'd prefer no follow-ups, just let me know.";
@@ -44,6 +45,59 @@ const defaultServices = {
   discoverOnX,
 };
 export type EngineServices = typeof defaultServices;
+
+/** Compare observed LinkedIn details without counting a new capture timestamp as new information. */
+function linkedInMetadata(contact: Contact): string {
+  const evidence = contact.linkedinEvidence;
+  return JSON.stringify({
+    name: contact.name, title: contact.title, company: contact.company,
+    location: contact.location, connectionDegree: contact.connectionDegree,
+    warmPaths: contact.warmPaths,
+    evidence: evidence ? {
+      headline: evidence.headline, location: evidence.location,
+      education: evidence.education, mutualConnections: evidence.mutualConnections,
+      sourceText: evidence.sourceText, sourceUrl: evidence.sourceUrl,
+    } : undefined,
+  });
+}
+
+/** Refresh only page-observed fields; outreach and user-supplied identity remain authoritative. */
+function refreshLinkedInContact(saved: Contact, observed: Contact): boolean {
+  const before = linkedInMetadata(saved);
+  for (const field of ["name", "title", "company", "location"] as const) {
+    const value = observed[field]?.trim();
+    if (value) saved[field] = value;
+  }
+  if ([1, 2, 3].includes(observed.connectionDegree ?? 0)) saved.connectionDegree = observed.connectionDegree;
+  const pathKeys = new Set(saved.warmPaths.map(path => `${path.type}:${path.detail.trim().replace(/\s+/g, " ").toLowerCase()}`));
+  for (const path of observed.warmPaths) {
+    const detail = path.detail.trim();
+    const key = `${path.type}:${detail.replace(/\s+/g, " ").toLowerCase()}`;
+    if (detail && !pathKeys.has(key)) {
+      saved.warmPaths.push({ type: path.type, detail });
+      pathKeys.add(key);
+    }
+  }
+  if (observed.linkedinEvidence) {
+    const incoming = observed.linkedinEvidence;
+    const fields = ["headline", "location", "education", "mutualConnections", "sourceText", "sourceUrl"] as const;
+    if (fields.some(field => Boolean(incoming[field]?.trim()))) {
+      const merged = {
+        headline: saved.linkedinEvidence?.headline || "",
+        sourceText: saved.linkedinEvidence?.sourceText || "",
+        capturedAt: saved.linkedinEvidence?.capturedAt || incoming.capturedAt,
+        ...saved.linkedinEvidence,
+      };
+      for (const field of fields) {
+        const value = incoming[field]?.trim();
+        if (value) merged[field] = value;
+      }
+      if (Number.isFinite(incoming.capturedAt) && incoming.capturedAt > 0) merged.capturedAt = incoming.capturedAt;
+      saved.linkedinEvidence = merged;
+    }
+  }
+  return linkedInMetadata(saved) !== before;
+}
 
 function requireContact(state: AppState, contactId: string): Contact {
   const contact = state.contacts.find((item) => item.id === contactId);
@@ -761,15 +815,38 @@ export async function applyAction(
           throw new Error(
             "No readable people were found on the open page. Wait for LinkedIn results to load, open a people search, or add a contact manually.",
           );
-        const alreadyAddedToTarget = (person: Contact) =>
-          state.contacts.some(
-            (existing) =>
-              existing.targetId === target.id &&
-              existing.linkedinUrl === person.linkedinUrl,
-          );
-        const alreadyAdded = contacts.filter(alreadyAddedToTarget).length;
-        const additions = contacts.filter((person) => !alreadyAddedToTarget(person));
-        state.contacts.push(...additions);
+        const byProfile = new Map<string, Contact>();
+        for (const existing of state.contacts) {
+          const canonical = existing.linkedinUrl && canonicalLinkedInProfile(existing.linkedinUrl);
+          if (existing.targetId === target.id && canonical && !byProfile.has(canonical.toLowerCase())) byProfile.set(canonical.toLowerCase(), existing);
+        }
+        const additions: Contact[] = [];
+        const refreshedIds = new Set<string>();
+        const visible: Contact[] = [];
+        let alreadyAdded = 0;
+        for (const observed of contacts) {
+          const canonical = observed.linkedinUrl && canonicalLinkedInProfile(observed.linkedinUrl);
+          if (!canonical) continue;
+          const existing = byProfile.get(canonical.toLowerCase());
+          if (existing) {
+            alreadyAdded++;
+            if (refreshLinkedInContact(existing, observed)) {
+              const ranked = rankContact(existing, state.profile, target);
+              existing.reason = ranked.reason;
+              existing.relevance = ranked.relevance;
+              existing.warmPaths = ranked.warmPaths;
+              refreshedIds.add(existing.id);
+            }
+            visible.push(existing);
+          } else {
+            const added = { ...observed, targetId: target.id, linkedinUrl: canonical };
+            state.contacts.push(added);
+            additions.push(added);
+            byProfile.set(canonical.toLowerCase(), added);
+            visible.push(added);
+          }
+        }
+        if (!visible.length) throw new Error("No readable people with valid LinkedIn profile links were found. Wait for results to load or add a contact manually.");
         state.usage.profiles += additions.length;
         for (const contact of additions)
           event(
@@ -778,14 +855,23 @@ export async function applyAction(
             "contact_added",
             `${contact.name} imported from your open LinkedIn page.`,
           );
+        const refreshed = refreshedIds.size;
         data = {
           imported: additions.length,
           scanned: contacts.length,
           alreadyAdded,
+          refreshed,
+          people: [...new Map(visible.map(person => [person.id, person])).values()].map(person => ({
+            id: person.id, name: person.name, title: person.title,
+            linkedinUrl: canonicalLinkedInProfile(person.linkedinUrl || "") || person.linkedinUrl || "",
+            ...(person.location ? { location: person.location } : {}),
+          })),
         };
         message = additions.length
-          ? `${additions.length} ${additions.length === 1 ? "person" : "people"} imported.${alreadyAdded ? ` ${alreadyAdded} already added to this target.` : ""}`
-          : `All ${contacts.length} visible people are already added to this target. Open another results page or choose another target.`;
+          ? `${additions.length} ${additions.length === 1 ? "person" : "people"} imported.${refreshed ? ` Refreshed visible details for ${refreshed} already-added ${refreshed === 1 ? "person" : "people"}.` : alreadyAdded ? ` ${alreadyAdded} already added to this target; their visible details are unchanged.` : ""}`
+          : refreshed
+            ? `Updated visible LinkedIn details for ${refreshed} already-added ${refreshed === 1 ? "person" : "people"}. No duplicate contacts were added.`
+            : `All ${contacts.length} visible people are already added to this target; their visible details are unchanged. Open another results page or choose another target.`;
       }
       break;
     }

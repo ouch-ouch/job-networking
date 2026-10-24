@@ -48,6 +48,17 @@ export type Contact = {
   title: string;
   company: string;
   linkedinUrl?: string;
+  location?: string;
+  /** Observed search-card text, kept separately from inferred matches and email guesses. */
+  linkedinEvidence?: {
+    headline: string;
+    location?: string;
+    education?: string;
+    mutualConnections?: string;
+    sourceText: string;
+    sourceUrl?: string;
+    capturedAt: number;
+  };
   email?: string;
   emailConfidence?: number;
   emailVerified?: boolean;

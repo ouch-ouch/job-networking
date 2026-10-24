@@ -225,6 +225,39 @@ test("profile URLs reject non-profile pages and outside origins", () => {
   );
 });
 
+test("imports preserve observed headlines and source details without inventing a target-company email", () => {
+  const observed = {
+    name: "Taylor Example", title: "Engineering@OtherCo | Distributed Systems | NYU",
+    linkedinUrl: "https://www.linkedin.com/in/taylor-example/",
+    location: "San Francisco Bay Area", degreeText: "2nd",
+    mutualConnections: "Morgan Example is a mutual connection",
+    sourceText: "Taylor Example\n• 2nd\nEngineering@OtherCo | Distributed Systems | NYU\nSan Francisco Bay Area",
+    sourceUrl: "https://www.linkedin.com/search/results/people/?keywords=OtherCo",
+  };
+  const contact = contactFromSearchResult(observed, target, profile)!;
+  assert.equal(contact.title, observed.title);
+  assert.equal(contact.company, "OtherCo");
+  assert.equal(contact.location, observed.location);
+  assert.equal(contact.linkedinEvidence?.headline, observed.title);
+  assert.equal(contact.linkedinEvidence?.sourceText, observed.sourceText);
+  assert.equal(contact.linkedinEvidence?.sourceUrl, observed.sourceUrl);
+  assert.ok(contact.linkedinEvidence!.capturedAt > 0);
+  assert.equal(contact.email, undefined);
+  assert.equal(contact.warmPaths.some(path => path.type === "alumni"), false);
+  assert.equal(contact.warmPaths.find(path => path.type === "mutual_connection")?.detail, observed.mutualConnections);
+  const former = contactFromSearchResult({ ...observed, title: "Former Engineer at Acme | Open to work" }, target, profile)!;
+  assert.equal(former.company, "");
+  assert.equal(former.email, undefined);
+  const aspiring = contactFromSearchResult({ ...observed, title: `Looking for opportunities at ${target.company}` }, target, profile)!;
+  assert.equal(aspiring.company, "");
+  assert.equal(aspiring.email, undefined);
+  assert.doesNotMatch(aspiring.reason, /Works at/);
+  const emptyCompany = contactFromSearchResult({ ...observed, title: "Engineer" }, { ...target, company: "" }, profile)!;
+  assert.equal(emptyCompany.email, undefined);
+  const unicodeCompany = contactFromSearchResult({ ...observed, company: "公司甲" }, { ...target, company: "公司乙" }, profile)!;
+  assert.equal(unicodeCompany.email, undefined);
+});
+
 test("LinkedIn fill refuses unapproved drafts, wrong contacts, and overlong connection notes before reading the page", () => {
   const draft: Draft = {
     id: "draft",
