@@ -162,6 +162,7 @@ GRANT ROLE COFFEE_CHAT_ROLE TO USER COFFEE_CHAT_SVC;
 --    If this errors on your account, use the fallback below instead.
 CREATE AUTHENTICATION POLICY IF NOT EXISTS COFFEE_CHAT.APP.PAT_ANY_NETWORK
   PAT_POLICY = (NETWORK_POLICY_EVALUATION = ENFORCED_NOT_REQUIRED);
+ALTER USER COFFEE_CHAT_SVC UNSET AUTHENTICATION POLICY;  -- a user can hold only one; this makes re-runs safe
 ALTER USER COFFEE_CHAT_SVC SET AUTHENTICATION POLICY COFFEE_CHAT.APP.PAT_ANY_NETWORK;
 
 -- Fallback (only if step 5 fails): an allow-all network policy on the service user.
