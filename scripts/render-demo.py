@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Render an honest, narrated 110-second walkthrough from captured UI PNGs.
 
-Use Python with Pillow installed. On this workstation the bundled runtime is:
-/Users/juliagontijolopes/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3
+Requires Python with Pillow, FFmpeg, and macOS speech synthesis (say).
 No browser control, remote requests, credentials, outreach, or Calendar writes.
 """
 from __future__ import annotations
@@ -13,7 +12,6 @@ import math
 import shutil
 import subprocess
 import tempfile
-import textwrap
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
@@ -119,7 +117,6 @@ def main():
             audio_paths.append(audio)
             audio_lengths.append(duration(audio))
             image = work / f"{index:02d}.png"
-            frame(base / scene["image"], image, scene, index, len(scenes), width, height)
             image_paths.append(image)
             print(f"Prepared scene {index:02d}: narration {audio_lengths[-1]:.1f}s", flush=True)
 
@@ -140,6 +137,7 @@ def main():
         for index, (scene, image, audio, scene_frames) in enumerate(zip(scenes, image_paths, audio_paths, frames), 1):
             hold = scene_frames / fps
             clip = work / f"scene-{index:02d}.mp4"
+            frame(base / scene["image"], image, scene, index, len(scenes), width, height)
             run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", "-loop", "1", "-framerate", str(fps), "-i", str(image), "-i", str(audio),
                  "-t", f"{hold:.6f}", "-vf", "format=yuv420p", "-af", f"apad,atrim=duration={hold:.6f}",
                  "-c:v", "libx264", "-preset", "fast", "-tune", "stillimage", "-crf", "23", "-maxrate", "1400k", "-bufsize", "2800k",

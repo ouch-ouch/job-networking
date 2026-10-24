@@ -2,6 +2,8 @@
 
 A Chrome side panel that helps you turn a job opportunity into a thoughtful coffee chat. Write your outreach template once, find people with a warm connection, and review every message before sending.
 
+Watch the [1 minute 50 second narrated walkthrough](docs/demo/coffee-chat-copilot-walkthrough.mp4). It combines a real LinkedIn results page with labeled demo workflows for contacts, approval, Google setup, scheduling, questions, prep, notes, and activity. It does not record a fresh Google authorization or send real messages/invitations. [Demo notes and reproduction steps](docs/DEMO.md).
+
 ## Teammates: test the `julia` branch
 
 This branch combines the Coffee Chat interface and Chrome extension with the team's Grok/X research backend. Run all commands below from the **repository root**; the backend is an npm workspace.

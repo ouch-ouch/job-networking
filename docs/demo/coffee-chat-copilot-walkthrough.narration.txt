@@ -1,0 +1,47 @@
+01. From opportunity to conversation
+Product walkthrough • workflow examples
+Coffee Chat Copilot turns a job opportunity into a conversation, with your own voice and review before every message.
+
+02. Find people on LinkedIn
+Real LinkedIn results
+This is a real LinkedIn people search. In the installed extension, import visible results from the tab beside the panel.
+
+03. Import with review
+Demo workflow
+The remaining screens use fictional contacts to demonstrate the workflow. This browser preview does not perform a real LinkedIn import.
+
+04. Keep context beside each contact
+Demo workflow
+Review each contact and their source context. An email guess is only a guess, and needs your independent confirmation.
+
+05. Write your message once
+Demo workflow
+Write your outreach once. The template keeps your wording while placeholders adapt the message to a job and contact.
+
+06. Review, then approve
+Demo workflow
+Every draft enters your approval queue. Edit, regenerate, skip, or approve it. Approval alone never sends an email.
+
+07. Connect your own Google account
+Google setup controls • authorization not recorded
+These are the Google setup controls. Authorization is not recorded here. Live Gmail and Calendar access requires your own consent in Chrome.
+
+08. Choose a confirmed meeting time
+Demo workflow • no invitation sent
+Once a time is agreed, choose it in the meeting form. This is a demo; no real calendar invitation is sent.
+
+09. Build your question bank
+Demo workflow
+Build a question bank by adding, editing, or skipping suggestions. Only approved bank questions are selected for your prep brief.
+
+10. Prepare for the conversation
+Demo workflow
+The prep view brings context and approved questions together, so you can spend the conversation listening instead of searching.
+
+11. Turn notes into a thoughtful follow-up
+Demo workflow
+After the chat, save a few notes. Review a thank-you draft and decide whether to include the optional referral paragraph.
+
+12. See every next step
+Demo workflow
+The activity view keeps next steps together. This walkthrough sent no real emails or invitations. You stay in control.

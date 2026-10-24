@@ -1,0 +1,47 @@
+1
+00:00:00,000 --> 00:00:07,000
+Coffee Chat Copilot turns a job opportunity into a conversation, with your own voice and review before every message.
+
+2
+00:00:07,000 --> 00:00:16,000
+This is a real LinkedIn people search. In the installed extension, import visible results from the tab beside the panel.
+
+3
+00:00:16,000 --> 00:00:26,000
+The remaining screens use fictional contacts to demonstrate the workflow. This browser preview does not perform a real LinkedIn import.
+
+4
+00:00:26,000 --> 00:00:34,000
+Review each contact and their source context. An email guess is only a guess, and needs your independent confirmation.
+
+5
+00:00:34,000 --> 00:00:42,000
+Write your outreach once. The template keeps your wording while placeholders adapt the message to a job and contact.
+
+6
+00:00:42,000 --> 00:00:52,000
+Every draft enters your approval queue. Edit, regenerate, skip, or approve it. Approval alone never sends an email.
+
+7
+00:00:52,000 --> 00:01:02,000
+These are the Google setup controls. Authorization is not recorded here. Live Gmail and Calendar access requires your own consent in Chrome.
+
+8
+00:01:02,000 --> 00:01:12,000
+Once a time is agreed, choose it in the meeting form. This is a demo; no real calendar invitation is sent.
+
+9
+00:01:12,000 --> 00:01:21,000
+Build a question bank by adding, editing, or skipping suggestions. Only approved bank questions are selected for your prep brief.
+
+10
+00:01:21,000 --> 00:01:30,000
+The prep view brings context and approved questions together, so you can spend the conversation listening instead of searching.
+
+11
+00:01:30,000 --> 00:01:40,000
+After the chat, save a few notes. Review a thank-you draft and decide whether to include the optional referral paragraph.
+
+12
+00:01:40,000 --> 00:01:50,000
+The activity view keeps next steps together. This walkthrough sent no real emails or invitations. You stay in control.
