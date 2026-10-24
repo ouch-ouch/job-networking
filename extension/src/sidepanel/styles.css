@@ -4220,10 +4220,11 @@ hr {
   gap: 5px;
 }
 .question-why {
-  margin: -12px 0 16px;
+  margin: 2px 0 4px;
   font-size: 11px;
   line-height: 1.5;
   color: var(--muted);
+}
 
 /* ---- Click-and-type template editor (TemplateEditor.tsx) ---- */
 .template-editor {
