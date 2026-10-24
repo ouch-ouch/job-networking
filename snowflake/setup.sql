@@ -181,5 +181,11 @@ ALTER USER COFFEE_CHAT_SVC ADD PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_BACKEND
   ROLE_RESTRICTION = 'COFFEE_CHAT_ROLE'
   DAYS_TO_EXPIRY = 7
   COMMENT = 'Shipyard hackathon backend';
--- Lost it, or need to re-run the whole file? First run:
+-- Re-running the file? "Programmatic access token COFFEE_CHAT_BACKEND already exists"
+-- on this last statement is expected: everything above it still ran.
+-- Need another token (e.g. for local testing)? Add one with a new name instead of
+-- removing this one, which would break the backend that already uses it:
+--   ALTER USER COFFEE_CHAT_SVC ADD PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_LOCAL
+--     ROLE_RESTRICTION = 'COFFEE_CHAT_ROLE' DAYS_TO_EXPIRY = 7;
+-- Lost the backend token? REMOVE it, then re-run this statement (C must update Vercel):
 --   ALTER USER COFFEE_CHAT_SVC REMOVE PROGRAMMATIC ACCESS TOKEN COFFEE_CHAT_BACKEND;
