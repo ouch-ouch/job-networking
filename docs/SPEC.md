@@ -237,12 +237,51 @@ All endpoints return JSON. Use structured output / tool use so the result always
 
 ## 9. Team split (4 people)
 
-| Person | Area | Owns |
+The three master's students take the hardest parts: extension internals, DOM scraping, and the AI + Google APIs. Rachel owns the UI and the demo, which are self-contained and can be built against mock data the whole time.
+
+### D — Extension core + engine *(master's student, integration lead)*
+The hardest role: everything else plugs into it.
+- Vite + `@crxjs` scaffold, `manifest.config.ts` (permissions, side panel, content-script matches, pinned `key`)
+- `src/shared/`: `types.ts`, `messages.ts`, `storage.ts` (typed get/set helpers + a `useStore` hook for the UI)
+- Service worker message router: wires every action in `messages.ts` to B's and C's functions
+- Draft state machine: `pending → approved → sent / failed`, and moving `Contact.stage` forward
+- `chrome.alarms` scheduler: follow-ups, reply polling, prep-brief trigger, post-meeting thank-you trigger, demo-mode intervals
+- Rate limits + "stop on reply" logic
+- **Hour 0 deliverable:** scaffold + shared types pushed by 0:20 so everyone can start
+
+### B — LinkedIn + sourcing *(master's student)*
+LinkedIn's DOM is messy and changes often, so this role takes the most debugging.
+- `linkedin-search.ts`: scrape people-search results → `Contact[]` (name, title, profile URL, degree)
+- `linkedin-profile.ts`: scrape education + experience → `warmPaths`; fill the connect note / message box; "Mark sent" button
+- Warm-path scoring → `relevance` + `reason`
+- Email pattern guesser + company-domain lookup, with a confidence score
+- `job-page.ts`: grab job description text from LinkedIn / Greenhouse / Lever postings
+- Build the search URL from a `Target` (company + role keywords + NYU filter)
+
+### C — AI backend + Google APIs *(master's student)*
+- `backend/`: all 8 `/ai/*` endpoints, the Claude API with structured output, and the prompts in §6
+- Make sure the 300-character LinkedIn limit and "picked questions must be approved" rules are enforced in code, not just in the prompt
+- `src/google/`: `chrome.identity` token flow, `gmail.ts` (send, list threads, fetch replies), `calendar.ts` (create event with Meet link + invite, patch the description)
+- Deploy the backend (Vercel) and share the URL by 1:00
+
+### A — Side panel UI + demo *(Rachel)*
+Builds against mock data from minute 0, then switches to D's `useStore` once it exists.
+- React screens: Onboarding/Profile, Template editor (highlight `{{placeholders}}`), Targets + Contacts list, **Approval Queue** (edit / approve / reject / regenerate), **Question Bank** (Add / Skip / edit cards), prep-brief view, post-chat notes prompt, **Activity / Messages bar**, pipeline board
+- Mock data file (`src/shared/mock.ts`) that other people can reuse for testing
+- Google Cloud project + OAuth client setup (a click-through task, done in the first 20 minutes, then hand the client ID to C)
+- Demo: seed data, the test LinkedIn account + test inboxes, the backup video, and the pitch
+
+### Handoffs
+| From → To | What | By |
 |---|---|---|
-| **A — Extension shell + UI** | Side panel | Vite/CRX scaffold, routing, Profile + Template editor, Approval Queue, Activity bar, pipeline board, Question Bank page (Add / Skip / edit cards), prep-brief view, post-chat notes prompt. Builds against mock data from minute 0. |
-| **B — LinkedIn + sourcing** | Content scripts | People-search scraper → `Contact[]`, profile scraper (education, past employers, degree → `warmPaths`), warm-path scoring, email pattern guesser, fill connect note / message + "Mark sent", job-page text grabber. |
-| **C — Google** | Gmail + Calendar | `chrome.identity` OAuth, send email, reply polling + thread fetch, Calendar event + Meet link + invite, patching the event description with the prep brief. |
-| **D — AI + engine** | Backend + scheduler | All 8 AI endpoints + prompts, the follow-up / prep / thank-you engine in the service worker, demo-mode toggle, seed data for the demo (including a starter question bank). |
+| D → everyone | Scaffold, `types.ts`, `messages.ts` | 0:20 |
+| A → C | OAuth client ID | 0:20 |
+| A → everyone | `mock.ts` | 0:30 |
+| C → D | Backend URL + `google/*` functions | 1:00 |
+| B → D | Scrape + fill functions callable from the router | 1:15 |
+| D → A | `useStore` hook with live data | 1:15 |
+
+If Rachel finishes the UI early, the next most useful thing is writing and testing prompts with C, since that doesn't need deep code context.
 
 **Shared contract (agree on this in the first 20 minutes):** the types in §5 live in `src/shared/types.ts`, and the message-router actions in `src/shared/messages.ts`:
 `PARSE_JOB`, `SCRAPE_SEARCH`, `SCRAPE_PROFILE`, `GENERATE_DRAFTS`, `APPROVE_DRAFT`, `SEND_EMAIL`, `FILL_LINKEDIN`, `MARK_SENT`, `POLL_REPLIES`, `CREATE_MEETING`, `SUGGEST_QUESTIONS`, `UPDATE_QUESTION`, `GENERATE_PREP_BRIEF`, `SAVE_MEETING_NOTES`.
@@ -278,7 +317,7 @@ coffee-chat-copilot/
 │  │  ├─ google/           (C) gmail.ts, calendar.ts, auth.ts
 │  │  └─ shared/           types.ts, messages.ts, storage.ts
 │  └─ package.json
-└─ backend/                (D) AI endpoints
+└─ backend/                (C) AI endpoints
 ```
 
 ---
@@ -300,5 +339,5 @@ coffee-chat-copilot/
 ## 13. Open questions
 
 - Branding/name: "Coffee Chat Copilot" is a placeholder.
-- Who sets up the Google Cloud project + OAuth client (needs the extension ID pinned with a `key` in the manifest)?
+- Which master's student takes which of roles B, C, and D?
 - Which test LinkedIn account and test inboxes will we use for the live demo?
