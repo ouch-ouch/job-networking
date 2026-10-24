@@ -1,0 +1,93 @@
+{
+  "title": "Coffee Chat Copilot — product walkthrough",
+  "durationSeconds": 110,
+  "fps": 24,
+  "width": 1280,
+  "height": 800,
+  "scenes": [
+    {
+      "image": "screens/01-overview.png", "duration": 7,
+      "label": "Product walkthrough • workflow examples",
+      "title": "From opportunity to conversation",
+      "caption": "A guided product walkthrough. Workflow examples use fictional demo contacts.",
+      "narration": "Coffee Chat Copilot turns a job opportunity into a conversation, with your own voice and review before every message."
+    },
+    {
+      "image": "screens/02-linkedin.png", "duration": 9,
+      "label": "Real LinkedIn results",
+      "title": "Find people on LinkedIn",
+      "caption": "Real results page. In the installed extension, import only the visible people you choose to review.",
+      "narration": "This is a real LinkedIn people search. In the installed extension, import visible results from the tab beside the panel."
+    },
+    {
+      "image": "screens/03-import.png", "duration": 10,
+      "label": "Demo workflow",
+      "title": "Import with review",
+      "caption": "Workflow example: fictional contacts. This browser preview does not perform a live LinkedIn import.",
+      "narration": "The remaining screens use fictional contacts to demonstrate the workflow. This browser preview does not perform a real LinkedIn import."
+    },
+    {
+      "image": "screens/04-contact.png", "duration": 8,
+      "label": "Demo workflow",
+      "title": "Keep context beside each contact",
+      "caption": "Review contact details and their source. Email guesses remain unverified until you check them.",
+      "narration": "Review each contact and their source context. An email guess is only a guess, and needs your independent confirmation."
+    },
+    {
+      "image": "screens/05-template.png", "duration": 8,
+      "label": "Demo workflow",
+      "title": "Write your message once",
+      "caption": "Save your voice in a template. Fill placeholders using the job and contact context.",
+      "narration": "Write your outreach once. The template keeps your wording while placeholders adapt the message to a job and contact."
+    },
+    {
+      "image": "screens/06-approval.png", "duration": 10,
+      "label": "Demo workflow",
+      "title": "Review, then approve",
+      "caption": "Edit, regenerate, skip or approve. Approval alone never sends an email.",
+      "narration": "Every draft enters your approval queue. Edit, regenerate, skip, or approve it. Approval alone never sends an email."
+    },
+    {
+      "image": "screens/07-google.png", "duration": 10,
+      "label": "Google setup controls • authorization not recorded",
+      "title": "Connect your own Google account",
+      "caption": "Setup controls only. Google authorization is not recorded, and the AI API key stays on your server.",
+      "narration": "These are the Google setup controls. Authorization is not recorded here. Live Gmail and Calendar access requires your own consent in Chrome."
+    },
+    {
+      "image": "screens/08-calendar.png", "duration": 10,
+      "label": "Demo workflow • no invitation sent",
+      "title": "Choose a confirmed meeting time",
+      "caption": "Demo Calendar workflow. Creating a live event sends a real invitation after you choose the time.",
+      "narration": "Once a time is agreed, choose it in the meeting form. This is a demo; no real calendar invitation is sent."
+    },
+    {
+      "image": "screens/09-questions.png", "duration": 9,
+      "label": "Demo workflow",
+      "title": "Build your question bank",
+      "caption": "Add, edit or skip suggestions. Only approved bank questions are selected for prep briefs.",
+      "narration": "Build a question bank by adding, editing, or skipping suggestions. Only approved bank questions are selected for your prep brief."
+    },
+    {
+      "image": "screens/10-prep.png", "duration": 9,
+      "label": "Demo workflow",
+      "title": "Prepare for the conversation",
+      "caption": "Review approved questions and contact context. Check the facts before your chat.",
+      "narration": "The prep view brings context and approved questions together, so you can spend the conversation listening instead of searching."
+    },
+    {
+      "image": "screens/11-notes.png", "duration": 10,
+      "label": "Demo workflow",
+      "title": "Turn notes into a thoughtful follow-up",
+      "caption": "Demo notes become thank-you drafts, with an optional referral paragraph for your review.",
+      "narration": "After the chat, save a few notes. Review a thank-you draft and decide whether to include the optional referral paragraph."
+    },
+    {
+      "image": "screens/12-activity.png", "duration": 10,
+      "label": "Demo workflow",
+      "title": "See every next step",
+      "caption": "Track drafts, replies and meetings. No real emails or invitations were sent in this recording.",
+      "narration": "The activity view keeps next steps together. This walkthrough sent no real emails or invitations. You stay in control."
+    }
+  ]
+}
