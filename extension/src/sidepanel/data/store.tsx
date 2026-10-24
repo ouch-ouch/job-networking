@@ -14,6 +14,7 @@ import type {
 } from "../../shared/types";
 import { createMockState, MOCK_JOB_DESCRIPTION, mockSuggestionPool } from "../../shared/mock";
 import { mockFillTemplate, mockParseJob, mockPickQuestions } from "./fill";
+import { discoverViaBackend } from "./backend";
 
 export const EMAIL_CONFIDENCE_THRESHOLD = 0.5; // SPEC §8: below this, the user must confirm the address
 export const EMAIL_DAILY_CAP = 30;
@@ -169,35 +170,25 @@ function useMockActions(
       return target;
     });
 
-    /** SCRAPE_SEARCH */
+    /** SCRAPE_SEARCH: calls the real Grok backend (backend/src/server.ts). Falls
+     * back to a logged error (no fake contacts) if the backend is unreachable. */
     const scrapeSearch = withBusy((tid: string) => `scrape:${tid}`, async (targetId: string) => {
-      await wait(1200);
-      update((s) => {
-        const t = s.targets.find((x) => x.id === targetId);
-        if (!t) return s;
-        const domain = `${t.company.toLowerCase().replace(/[^a-z0-9]/g, "")}.example`;
-        const people = [
-          { name: "Avery Lin", title: `Software Engineer, ${t.team ?? "Engineering"}`, warm: [{ type: "alumni" as const, detail: "NYU Stern '21" }], rel: 92 },
-          { name: "Noah Patel", title: `Senior Engineer, ${t.team ?? "Platform"}`, warm: [{ type: "shared_org" as const, detail: "Tech@NYU" }], rel: 85 },
-          { name: "Grace Murphy", title: "Technical Recruiter", warm: [], rel: 70 },
-          { name: "Leo Brennan", title: "Engineering Manager", warm: [], rel: 61 },
-        ];
-        const fresh: Contact[] = people.map((p) => {
-          const [first, last] = p.name.toLowerCase().split(" ");
-          return {
-            id: uid("c"), targetId, name: p.name, title: p.title, company: t.company,
-            linkedinUrl: `https://www.linkedin.com/in/${first}-${last}-example`,
-            email: `${first}.${last}@${domain}`, emailConfidence: 0.6, connectionDegree: 2,
-            warmPaths: p.warm, relevance: p.rel,
-            reason: p.warm[0] ? `${p.warm[0].detail}, ${p.title.split(", ")[0]}` : p.title,
-            stage: "found", followUpCount: 0,
-          };
-        });
-        return log({ ...s, contacts: [...s.contacts, ...fresh] }, {
-          contactId: "", type: "agent_step", runId: uid("run"),
-          summary: `Grok called rank_contacts (Snowflake AI_SIMILARITY)`, detail: `→ ranked ${fresh.length} contacts, warm paths first`,
-        });
-      });
+      const t = stateRef.current.targets.find((x) => x.id === targetId);
+      if (!t) return;
+      const runId = uid("run");
+      try {
+        const { contacts: fresh, mode } = await discoverViaBackend(t, stateRef.current.profile);
+        update((s) => log({ ...s, contacts: [...s.contacts, ...fresh] }, {
+          contactId: "", type: "agent_step", runId,
+          summary: `Grok discovery (${mode}): found ${fresh.length} people on X`,
+          detail: fresh.map((c) => `${c.name} — ${c.reason}`).join("\n") || "No evidenced matches.",
+        }));
+      } catch (e) {
+        update((s) => log(s, {
+          contactId: "", type: "error", runId,
+          summary: "Grok discovery failed", detail: e instanceof Error ? e.message : String(e),
+        }));
+      }
     });
 
     const addContact = (c: Omit<Contact, "id" | "stage" | "followUpCount" | "warmPaths" | "relevance" | "reason"> & Partial<Contact>) =>
