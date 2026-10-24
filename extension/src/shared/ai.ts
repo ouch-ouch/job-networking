@@ -22,7 +22,59 @@ type DemoInput = {
   existingBank?: Question[];
   userNotes?: string;
   usedQuestionIds?: string[];
+  contacts?: Pick<Contact, "id" | "targetId" | "name" | "title" | "company" | "warmPaths" | "notes">[];
+  focusContactId?: string;
 };
+
+type NetworkQuestion = { text: string; category: Question["category"]; contactId: string | null; why: string };
+
+/** Demo-mode questions built only from what the user listed about each person. */
+export function networkQuestions(
+  contacts: NonNullable<DemoInput["contacts"]>,
+  targets: Target[],
+  profile?: Profile,
+): NetworkQuestion[] {
+  const out: NetworkQuestion[] = [];
+  for (const c of contacts) {
+    const first = c.name.split(/\s+/)[0];
+    const [jobTitle, ...rest] = c.title.split(/,\s*/);
+    const team = rest.join(", ") || targets.find((t) => t.id === c.targetId)?.team || "";
+    const teamName = team ? `the ${team} team` : `your team at ${c.company}`;
+    const role = targets.find((t) => t.id === c.targetId)?.role;
+    const add = (category: Question["category"], text: string, why: string) =>
+      out.push({ text, category, contactId: c.id || null, why });
+
+    if (/recruit|talent|university|sourc/i.test(c.title)) {
+      add("recruiting", `What makes an applicant for ${role ? `the ${role} role` : `roles at ${c.company}`} stand out to you beyond the resume?`,
+        `${first} is a ${jobTitle} at ${c.company}.`);
+      add("recruiting", `How does the interview process for ${role ?? "this role"} usually run, and what do strong candidates do differently?`,
+        `${first} recruits at ${c.company}${role ? ` and you are targeting ${role}` : ""}.`);
+    } else if (/manager|lead|director|head|vp/i.test(c.title)) {
+      add("team", `How does ${teamName} decide which problems to take on next?`,
+        `${first} is ${/^[aeiou]/i.test(jobTitle) ? "an" : "a"} ${jobTitle}${team ? ` on ${team}` : ""}.`);
+      add("recruiting", `What do new ${role ? role.replace(/,.*$/, "") + "s" : "hires"} on ${teamName} tend to work on in their first few months?`,
+        `${first} manages ${teamName}${role ? `, which matches your ${role} target` : ""}.`);
+    } else {
+      add("role", `What does a typical week look like for you as ${/^[aeiou]/i.test(jobTitle) ? "an" : "a"} ${jobTitle}${team ? ` on ${team}` : ""}?`,
+        `${first} is ${/^[aeiou]/i.test(jobTitle) ? "an" : "a"} ${jobTitle}${team ? ` on ${team}` : ""} at ${c.company}.`);
+      add("advice", `What helped you most when you were ramping up as ${/^[aeiou]/i.test(jobTitle) ? "an" : "a"} ${jobTitle}${team ? ` on ${team}` : ` at ${c.company}`}?`,
+        `${first} does the day-to-day work you'd be doing${role ? ` as ${role}` : ""}.`);
+    }
+
+    const alumni = c.warmPaths.find((w) => w.type === "alumni");
+    if (alumni) {
+      const school = profile?.school || "school";
+      add("career_path", `How did you get from ${school} to ${/^[aeiou]/i.test(jobTitle) ? "an" : "a"} ${jobTitle} role at ${c.company}, and what would you do the same way again?`,
+        `You and ${first} share a path: ${alumni.detail}.`);
+    }
+    const shared = c.warmPaths.find((w) => w.type !== "alumni");
+    if (shared) {
+      add("advice", `How has your experience with ${shared.detail.split(/[(,]/)[0].trim()} shaped your work at ${c.company}?`,
+        `You and ${first} have this in common: ${shared.detail}.`);
+    }
+  }
+  return out;
+}
 const fallbackQuestions = [
   {
     text: "What helped you learn the systems your team owns when you first joined?",
@@ -238,12 +290,19 @@ export function demoResponse(endpoint: string, payload: unknown): unknown {
       const existing = new Set(
         (data.existingBank || []).map((q) => q.text.toLowerCase().trim()),
       );
-      const questions = fallbackQuestions
-        .filter((q) => !existing.has(q.text.toLowerCase()))
-        .map((q) => ({ ...q }));
+      const people = (data.contacts || []).filter(
+        (c) => !data.focusContactId || c.id === data.focusContactId,
+      );
+      // With people listed, tailor to them (up to four, already sorted by relevance).
+      const pool: NetworkQuestion[] = people.length
+        ? networkQuestions(people.slice(0, data.focusContactId ? 1 : 4), data.targets || [], data.profile)
+        : fallbackQuestions.map((q) => ({ ...q, contactId: null, why: "General question; add people to your network to tailor these." }));
+      const questions = pool
+        .filter((q) => !existing.has(q.text.toLowerCase().trim()))
+        .slice(0, 10);
       if (!questions.length)
         throw new Error(
-          "These demo suggestions are already in your bank. Write a question or enable live AI for more.",
+          "You already have every demo question for these people. Write one of your own or enable live AI for more.",
         );
       return { questions };
     }

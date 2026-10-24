@@ -444,9 +444,11 @@ export async function applyAction(
         )
         .flatMap((item) => item.questionIds),
     );
-    const available = approved.filter(
-      (question) => !previouslyUsed.has(question.id),
-    );
+    // This person's own questions first, then general ones, then ones written for someone else.
+    const rank = (q: Question) => (q.contactId === contact.id ? 0 : q.contactId ? 2 : 1);
+    const available = approved
+      .filter((question) => !previouslyUsed.has(question.id))
+      .sort((a, b) => rank(a) - rank(b));
     const brief = await ai<PrepBrief>("/ai/prep-brief", {
       contact,
       target: targetFor(state, contact),
@@ -1217,13 +1219,32 @@ export async function applyAction(
       break;
     }
     case "SUGGEST_QUESTIONS": {
+      const focus = action.contactId
+        ? state.contacts.find((c) => c.id === action.contactId)
+        : undefined;
+      if (action.contactId && !focus) throw new Error("That contact no longer exists.");
+      // The people the questions are for: one chosen contact, or the most relevant active ones.
+      const network = (focus ? [focus] : state.contacts.filter((c) => !c.optedOut))
+        .sort((a, b) => b.relevance - a.relevance)
+        .slice(0, 30)
+        .map(({ id, targetId, name, title, company, warmPaths, reason, notes, stage }) => ({
+          id, targetId, name, title, company, warmPaths, reason, notes, stage,
+        }));
       const result = await ai<{
-        questions: { text: string; category: Question["category"] }[];
+        questions: {
+          text: string;
+          category: Question["category"];
+          contactId?: string | null;
+          why?: string;
+        }[];
       }>("/ai/suggest-questions", {
         profile: state.profile,
         targets: state.targets,
         existingBank: state.questions,
+        contacts: network,
+        ...(focus && { focusContactId: focus.id }),
       });
+      const known = new Set(network.map((c) => c.id));
       let count = 0;
       for (const question of result.questions)
         if (
@@ -1235,7 +1256,10 @@ export async function applyAction(
           )
         ) {
           state.questions.push({
-            ...question,
+            text: question.text,
+            category: question.category,
+            ...(question.contactId && known.has(question.contactId) && { contactId: question.contactId }),
+            ...(question.why && { why: question.why }),
             id: id("question"),
             source: "ai_suggested",
             status: "suggested",
@@ -1243,7 +1267,9 @@ export async function applyAction(
           });
           count++;
         }
-      message = `${count} new question suggestions. Add the ones you like to your bank.`;
+      message = focus
+        ? `${count} new questions for ${focus.name}. Add the ones you like to your bank.`
+        : `${count} new question suggestions for your network. Add the ones you like to your bank.`;
       break;
     }
     case "UPDATE_QUESTION": {

@@ -2403,14 +2403,24 @@ function QuestionsPage({
 }) {
   const [tab, setTab] = useState<"approved" | "suggested">("approved"),
     [text, setText] = useState(""),
-    [category, setCategory] = useState<QuestionCategory>("role");
-  const list = s.questions.filter((q) => q.status === tab);
+    [category, setCategory] = useState<QuestionCategory>("role"),
+    [forContact, setForContact] = useState(""); // "" = whole network
+  const people = [...s.contacts]
+    .filter((c) => !c.optedOut)
+    .sort((a, b) => b.relevance - a.relevance);
+  const names = new Map(s.contacts.map((c) => [c.id, c.name]));
+  // For one person: their questions plus general ones that fit anyone.
+  const matches = (q: Question) => !forContact || !q.contactId || q.contactId === forContact;
+  const list = s.questions.filter((q) => q.status === tab && matches(q));
+  const count = (status: Question["status"]) =>
+    s.questions.filter((q) => q.status === status && matches(q)).length;
   async function addQuestion(e: React.FormEvent) {
     e.preventDefault();
     const q: Question = {
       id: crypto.randomUUID(),
       text: text.trim(),
       category,
+      ...(forContact && { contactId: forContact }),
       source: "user_written",
       status: "approved",
       timesUsed: 0,
@@ -2437,7 +2447,7 @@ function QuestionsPage({
           onClick={async () => {
             if (
               await run(
-                { type: "SUGGEST_QUESTIONS" },
+                { type: "SUGGEST_QUESTIONS", ...(forContact && { contactId: forContact }) },
                 "Fresh questions are ready to review",
               )
             )
@@ -2447,6 +2457,26 @@ function QuestionsPage({
           <Sparkles size={16} /> Suggest questions
         </button>
       </div>
+      <label className="question-focus">
+        <span className="eyebrow">TAILOR TO</span>
+        <select
+          aria-label="Tailor questions to"
+          value={forContact}
+          onChange={(e) => setForContact(e.target.value)}
+        >
+          <option value="">
+            Your whole network ({people.length} {people.length === 1 ? "person" : "people"})
+          </option>
+          {people.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} · {c.title} · {c.company}
+            </option>
+          ))}
+        </select>
+        {!people.length && (
+          <small>Add people in My network so suggestions can be about them.</small>
+        )}
+      </label>
       <div className="questions-intro">
         <BookOpen size={23} />
         <p>
@@ -2459,24 +2489,24 @@ function QuestionsPage({
           className={tab === "approved" ? "active" : ""}
           onClick={() => setTab("approved")}
         >
-          My question bank{" "}
-          <span>
-            {s.questions.filter((q) => q.status === "approved").length}
-          </span>
+          My question bank <span>{count("approved")}</span>
         </button>
         <button
           className={tab === "suggested" ? "active" : ""}
           onClick={() => setTab("suggested")}
         >
-          For your consideration{" "}
-          <span>
-            {s.questions.filter((q) => q.status === "suggested").length}
-          </span>
+          For your consideration <span>{count("suggested")}</span>
         </button>
       </div>
       <div className="questions-grid">
         {list.map((q) => (
-          <QuestionCard key={q.id} question={q} run={run} busy={busy} />
+          <QuestionCard
+            key={q.id}
+            question={q}
+            contactName={q.contactId ? names.get(q.contactId) : undefined}
+            run={run}
+            busy={busy}
+          />
         ))}
         {!list.length && (
           <div className="panel">
@@ -2531,10 +2561,12 @@ function QuestionsPage({
 }
 function QuestionCard({
   question: q,
+  contactName,
   run,
   busy,
 }: {
   question: Question;
+  contactName?: string;
   run: Runner;
   busy: boolean;
 }) {
@@ -2543,7 +2575,10 @@ function QuestionCard({
   return (
     <article className="question-card">
       <div className="question-top">
-        <Badge>{categoryLabels[q.category]}</Badge>
+        <span className="question-tags">
+          <Badge>{categoryLabels[q.category]}</Badge>
+          {contactName && <Badge tone="green">For {contactName}</Badge>}
+        </span>
         <span>
           {q.source === "ai_suggested" ? (
             <Sparkles size={14} />
@@ -2562,6 +2597,7 @@ function QuestionCard({
       ) : (
         <h3>{q.text}</h3>
       )}
+      {q.why && !editing && <p className="question-why">{q.why}</p>}
       <div className="question-bottom">
         {q.status === "suggested" ? (
           <>
