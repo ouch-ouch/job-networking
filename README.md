@@ -4,7 +4,7 @@ A Chrome side panel that helps you turn a job opportunity into a thoughtful coff
 
 ## Teammates: test the `julia` branch
 
-This branch contains a self-contained Coffee Chat MVP: a React interface, Chrome extension, and local Grok backend. Run all commands below from the **repository root**. Newer work on other branches has not been integrated into this MVP.
+This branch combines the Coffee Chat interface and Chrome extension with the team's Grok/X research backend. Run all commands below from the **repository root**; the backend is an npm workspace.
 
 Requires **Node.js 20+**, npm, and **Google Chrome 116+** for extension features.
 
@@ -28,11 +28,11 @@ If you already have the repository, save your current changes, run `git fetch or
 
 ### Enable live AI and the extension
 
-1. On a fresh clone, copy `.env.example` to `.env`. Set your own `XAI_API_KEY`; keep the supplied model defaults unless your API account requires another supported model. Each developer runs their own backend. Share team credentials only through your team's approved secret-sharing channel, never through Git.
+1. On a fresh clone, copy `.env.example` to `.env`. Set your own `XAI_API_KEY` and a local `BACKEND_TOKEN` of at least 16 characters; the backend and extension build must use the same token. Keep the supplied model defaults unless your API account requires another supported model. Each developer runs their own backend. Share team credentials only through your team's approved secret-sharing channel, never through Git.
 2. In one terminal, run `npm run server` and leave it running. In the app, use backend URL `http://127.0.0.1:8787`. **Settings → Test connection** checks reachability and key presence; a successful live AI task checks actual provider access.
 3. Run `npm run build`. In Chrome, open `chrome://extensions`, enable **Developer mode**, click **Load unpacked**, and choose this clone's **`dist`** folder.
 4. Click Chrome's puzzle-piece menu, pin **Coffee Chat Copilot**, and click its icon to open the side panel. In **Settings**, turn **Demo mode off** and save your own name, school, major, background, availability, and signature. Also review your message template.
-5. For Gmail/Calendar, follow **[backend/SETUP.md](backend/SETUP.md)**. Each developer needs an OAuth client matching their extension ID, or a deliberately coordinated stable public extension key/client. The Google Cloud project owner must add each connecting Google account as a test user. Julia's local OAuth connection and API key are not included in this repository.
+5. For Gmail/Calendar, follow **[docs/SETUP.md](docs/SETUP.md)**. Each developer needs an OAuth client matching their extension ID, or a deliberately coordinated stable public extension key/client. The Google Cloud project owner must add each connecting Google account as a test user. Julia's local OAuth connection and API key are not included in this repository.
 6. Add a target job with its full description. Choose **Find people → Create smart searches**. Grok combines the job, team, company, and saved profile into editable Google/Bing queries. Review the resulting profiles. Add people found on the web manually, or use **Import LinkedIn results** on an open LinkedIn people-results tab.
 
 App records are stored locally in each browser/extension installation. The browser preview and extension also have separate storage. Teammates can test the same code independently; contacts, drafts, Google connections, and approvals do **not** sync across computers. There is no shared database or hosted backend in this branch.
@@ -57,7 +57,7 @@ While reading, the button says **Importing…**. Errors and duplicate-only resul
 
 ### Before reporting a live test as successful
 
-Run `npm test` and `npm run build`. Live job parsing and search planning have been exercised with Grok; the automated suite uses mocks for Gmail/Calendar and never sends real outreach. For an end-to-end test, use a separate inbox you control, confirm its address in the contact form, generate/review/approve/send one message, reply from that inbox, and check reply detection. Create a test Calendar event only when you intend to send its attendee invitation. See the detailed verification steps in [backend/SETUP.md](backend/SETUP.md#4-verify-real-actions-in-order).
+Run `npm test` and `npm run build`. Live job parsing and search planning have been exercised with Grok; the automated suite uses mocks for Gmail/Calendar and never sends real outreach. For an end-to-end test, use a separate inbox you control, confirm its address in the contact form, generate/review/approve/send one message, reply from that inbox, and check reply detection. Create a test Calendar event only when you intend to send its attendee invitation. See the detailed verification steps in [docs/SETUP.md](docs/SETUP.md#4-verify-real-actions-in-order).
 
 ## Run the demo
 
@@ -96,7 +96,7 @@ The output includes a Manifest V3 service worker, side panel, bundled fonts, and
 
 ## Connect live AI, Gmail, and Calendar
 
-Follow **[backend/SETUP.md](backend/SETUP.md)** for the complete setup, test-account checks, and troubleshooting.
+Follow **[docs/SETUP.md](docs/SETUP.md)** for the complete setup, test-account checks, and troubleshooting.
 
 - Copy `.env.example` to `.env` and configure `XAI_API_KEY` locally using an API key from [xAI Console](https://console.x.ai/team/default/api-keys). The backend alone reads this secret; it never enters the extension bundle.
 - Run `npm run server` in another terminal. Check **http://127.0.0.1:8787/health** or **Settings → Test connection**.

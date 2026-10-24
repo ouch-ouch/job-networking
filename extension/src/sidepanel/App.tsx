@@ -1245,6 +1245,7 @@ function PeopleSearchDialog({
   );
   const [plan, setPlan] = useState<PeopleSearchPlan | null>(null);
   const [planning, setPlanning] = useState(false);
+  const [researching, setResearching] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importAttempted, setImportAttempted] = useState(false);
   const [importFeedback, setImportFeedback] = useState("");
@@ -1324,12 +1325,17 @@ function PeopleSearchDialog({
           disabled={busy || !target}
           onClick={async () => {
             if (!target) return;
-            const result = await run({ type: "FIND_ON_X", targetId: target.id });
-            if (result) onClose();
+            setResearching(true);
+            try {
+              const result = await run({ type: "FIND_ON_X", targetId: target.id });
+              if (result) onClose();
+            } finally {
+              setResearching(false);
+            }
           }}
         >
-          {busy ? <LoaderCircle size={16} className="spin" /> : <AtSign size={16} />}
-          {busy ? "Researching on X…" : "Find people on X"}
+          {researching ? <LoaderCircle size={16} className="spin" /> : <AtSign size={16} />}
+          {researching ? "Researching on X…" : "Find people on X"}
         </button>
         <div className="callout search-context">
           <Sparkles size={20} />

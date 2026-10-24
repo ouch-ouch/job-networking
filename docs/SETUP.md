@@ -12,6 +12,8 @@ Profiles, targets, contacts, drafts, questions, and activity are saved locally i
 
 ## 1. Configure Grok (xAI) locally
 
+The integrated backend also requires `BACKEND_TOKEN` (a random local secret of at least 16 characters). Set it in root `.env` before starting the server or building the extension; both use the same value. Set `ALLOWED_ORIGINS` to your actual `chrome-extension://<extension-id>` and `http://127.0.0.1:5173`, separated by a comma, for X research. These settings do not change the LinkedIn page reader.
+
 1. Open [xAI Console → API Keys](https://console.x.ai/team/default/api-keys) and create an API key for this project under the intended team. Ensure that team has API credits/billing and access to `grok-4.7`. Use an inference API key; this app does not need a Management API key. See the [official xAI quickstart](https://docs.x.ai/developers/quickstart) for account and key setup.
 2. In the repository root, copy `.env.example` to `.env` if `.env` does not already exist. Open `.env` in your editor and put the key after `XAI_API_KEY=`. Do not paste it into chat, put it in a `VITE_` variable, or add it to the extension settings. `.env` is ignored by Git.
 3. After `npm ci`, run `npm run server`. Keep that terminal running. It listens only at `http://127.0.0.1:8787` on your computer; every teammate starts their own server.
@@ -41,6 +43,8 @@ Gmail read access is a restricted scope. Public distribution has additional Goog
 6. Live mode opens an independent workspace and intentionally clears the seeded demo identity. In **Settings**, enter and **save your own personal profile**, including your name, before creating or sending outreach; a blank name blocks sending. Then add real contacts for controlled tests. Keep your Google account, OAuth client, and enabled APIs in the same intended configuration. Fictional contacts stay in the demo workspace and are blocked from live sends.
 
 The client ID is public and compiled into `dist/manifest.json`. No Google secret or Google access token is placed in `.env`. Tokens stay in Chrome Identity's cache and are used directly against Google APIs.
+
+New team builds use a pinned public extension key by default. If you already connected Google using an earlier build with **no** manifest key, set `PRESERVE_UNPACKED_ID=true` in your local `.env` before rebuilding and keep the same `dist` path. This keeps that installation's existing extension ID and local records. Leave it false for a new team installation. Always match the OAuth client to the ID Chrome actually displays.
 
 As an alternative to separate clients, the team can agree on one **public** extension key and put that same value in each developer's local `EXTENSION_PUBLIC_KEY=`. Rebuild and reload each extension, verify that the displayed IDs match, then register that resulting ID in one Chrome Extension OAuth client. Developers can use that client's public `GOOGLE_CLIENT_ID` while each authorizes their own Google account; the project administrator still needs to allow every account as a test user. Chrome's [official OAuth guide](https://developer.chrome.com/docs/extensions/how-to/integrate/oauth) explains obtaining and using the public `key`. Never share a private signing key or use one in the manifest. If you change the public key or extension ID, create/update the Google Chrome Extension client to match and rebuild.
 

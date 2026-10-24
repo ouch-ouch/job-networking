@@ -61,7 +61,9 @@ const manifest = {
         },
       }
     : {}),
-  key: process.env.EXTENSION_PUBLIC_KEY || teamPublicKey,
+  ...(process.env.PRESERVE_UNPACKED_ID === "true"
+    ? {}
+    : { key: process.env.EXTENSION_PUBLIC_KEY || teamPublicKey }),
 };
 // Same shared token the side panel gets from vite.config.ts; actions run in the worker.
 const define = { __BACKEND_TOKEN__: JSON.stringify(process.env.BACKEND_TOKEN || "") };
