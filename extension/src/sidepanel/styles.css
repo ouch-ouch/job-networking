@@ -1986,6 +1986,31 @@ hr {
   font-weight: 600;
   cursor: pointer;
 }
+.people-import-footer {
+  display: block;
+}
+.people-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 12px;
+}
+.import-source-hint {
+  color: #637469;
+  font-size: 11px;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.import-feedback {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid #d5e1cc;
+  border-radius: 6px;
+  color: var(--green);
+  background: var(--sage);
+  font-size: 12px;
+  line-height: 1.6;
+}
 .callout {
   display: flex;
   gap: 11px;

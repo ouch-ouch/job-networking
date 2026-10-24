@@ -1244,6 +1244,49 @@ function PeopleSearchDialog({
     target ? buildLinkedInSearchQuery(target, state.profile) : "",
   );
   const [plan, setPlan] = useState<PeopleSearchPlan | null>(null);
+  const [planning, setPlanning] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importAttempted, setImportAttempted] = useState(false);
+  const [importFeedback, setImportFeedback] = useState("");
+  const importError = useContext(DialogErrorContext);
+  const isExtension =
+    typeof chrome !== "undefined" && Boolean(chrome.runtime?.id && chrome.tabs?.query);
+  const [activePage, setActivePage] = useState<string | null>(null);
+  const [checkingPage, setCheckingPage] = useState(isExtension);
+  useEffect(() => {
+    if (!isExtension) return;
+    let alive = true;
+    const refresh = () => {
+      void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+        if (!alive) return;
+        setActivePage(tab?.url || null);
+        setCheckingPage(false);
+      }).catch(() => {
+        if (!alive) return;
+        setActivePage(null);
+        setCheckingPage(false);
+      });
+    };
+    const onUpdated = (_tabId: number, change: chrome.tabs.TabChangeInfo) => {
+      if (change.url || change.status === "complete") refresh();
+    };
+    refresh();
+    chrome.tabs.onActivated.addListener(refresh);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    return () => {
+      alive = false;
+      chrome.tabs.onActivated.removeListener(refresh);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+    };
+  }, [isExtension]);
+  let isPeopleResults = false;
+  try {
+    const page = activePage && new URL(activePage);
+    isPeopleResults = Boolean(page && page.protocol === "https:" &&
+      ["www.linkedin.com", "linkedin.com"].includes(page.hostname) &&
+      /^\/search\/results\/people\/?$/.test(page.pathname));
+  } catch { /* An unreadable tab has no importable results. */ }
+  const canImport = state.settings.demoMode || (isExtension && !checkingPage && isPeopleResults);
   const searchUrl =
     target && keywords.trim()
       ? buildLinkedInSearchUrl(target, state.profile, { keywords })
@@ -1301,15 +1344,20 @@ function PeopleSearchDialog({
           disabled={busy || !target}
           onClick={async () => {
             if (!target) return;
-            const result = await run({
-              type: "GENERATE_SEARCH_PLAN",
-              targetId: target.id,
-            });
-            if (result?.data) setPlan(result.data as PeopleSearchPlan);
+            setPlanning(true);
+            try {
+              const result = await run({
+                type: "GENERATE_SEARCH_PLAN",
+                targetId: target.id,
+              });
+              if (result?.data) setPlan(result.data as PeopleSearchPlan);
+            } finally {
+              setPlanning(false);
+            }
           }}
         >
-          {busy ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}
-          {busy ? "Creating searches…" : plan ? "Regenerate smart searches" : "Create smart searches"}
+          {planning ? <LoaderCircle size={16} className="spin" /> : <Sparkles size={16} />}
+          {planning ? "Creating searches…" : plan ? "Regenerate smart searches" : "Create smart searches"}
         </button>
         {!state.profile.school.trim() && !state.profile.background.trim() && (
           <p className="field-help">
@@ -1450,21 +1498,58 @@ function PeopleSearchDialog({
         </div>
         </details>
       </div>
-      <div className="dialog-footer">
+      <div className="dialog-footer people-import-footer">
+        <p className="import-source-hint">
+          {state.settings.demoMode
+            ? "Demo import uses fictional contacts. No LinkedIn page is read."
+            : !isExtension
+              ? "Live import requires Coffee Chat Copilot’s Chrome extension side panel. This browser preview supports adding people manually."
+              : checkingPage
+                ? "Checking the active Chrome tab…"
+                : isPeopleResults
+                  ? "Ready to read your active LinkedIn people-results tab."
+                  : "Open a LinkedIn people-results tab in Chrome first. Google results and individual profiles cannot be imported here."}
+        </p>
+        {importing && (
+          <p className="import-feedback" role="status">
+            Reading the page and checking for people already on your list…
+          </p>
+        )}
+        {importAttempted && !importing && importError && (
+          <p className="inline-error" role="alert">{importError}</p>
+        )}
+        {!importing && importFeedback && (
+          <p className="import-feedback" role="status">{importFeedback}</p>
+        )}
+        <div className="people-import-actions">
         <button className="button subtle" onClick={onAddManually}>
           Add manually
         </button>
         <button
           className="button primary"
-          disabled={busy || !target}
+          disabled={busy || !target || !canImport}
+          aria-busy={importing}
           onClick={async () => {
-            if (!target) return;
-            const result = await run({ type: "SCRAPE_SEARCH", targetId: target.id });
-            if (result) onClose();
+            if (!target || !canImport) return;
+            setImportAttempted(true);
+            setImportFeedback("");
+            setImporting(true);
+            try {
+              const result = await run({ type: "SCRAPE_SEARCH", targetId: target.id });
+              if (result) {
+                setImportFeedback(result.message || "Import complete.");
+                const imported = (result.data as { imported?: number } | undefined)?.imported;
+                if (imported && imported > 0) onClose();
+              }
+            } finally {
+              setImporting(false);
+            }
           }}
         >
-          Import LinkedIn results <ArrowDownLeft size={16} />
+          {importing ? <LoaderCircle size={16} className="spin" /> : <ArrowDownLeft size={16} />}
+          {importing ? "Importing…" : state.settings.demoMode ? "Import demo contacts" : "Import LinkedIn results"}
         </button>
+        </div>
       </div>
     </Dialog>
   );

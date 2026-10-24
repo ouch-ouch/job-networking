@@ -1038,3 +1038,77 @@ test("X: live discovery goes through the backend service and skips people alread
   assert.match(second.message || "", /already on this target/);
   assert.equal(asked, 2);
 });
+
+test("live search import reports new and already-added people, including repeated imports", async () => {
+  const { services, calls } = harness();
+  let state = liveState();
+  const targetId = state.targets[0].id;
+  const duplicate = { ...state.contacts[0], linkedinUrl: "https://www.linkedin.com/in/existing-person/" };
+  state.contacts[0] = duplicate;
+  const incoming = {
+    ...duplicate, id: "new-live-person", name: "New Person",
+    linkedinUrl: "https://www.linkedin.com/in/new-person/", email: undefined,
+    stage: "found" as const, followUpCount: 0,
+  };
+  services.scrapeSearch = async () => [duplicate, incoming];
+  const originalDrafts = structuredClone(state.drafts);
+  const first = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
+  assert.deepEqual(first.data, { imported: 1, scanned: 2, alreadyAdded: 1 });
+  assert.equal(first.state.contacts.length, state.contacts.length + 1);
+  assert.equal(first.state.usage.profiles, state.usage.profiles + 1);
+  assert.deepEqual(first.state.drafts, originalDrafts);
+  state = first.state;
+  const repeated = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
+  assert.deepEqual(repeated.data, { imported: 0, scanned: 2, alreadyAdded: 2 });
+  assert.match(repeated.message!, /All 2 visible people are already added to this target/);
+  assert.match(repeated.message!, /Open another results page/);
+  assert.equal(repeated.state.contacts.length, state.contacts.length);
+  assert.equal(repeated.state.usage.profiles, state.usage.profiles);
+  assert.deepEqual(repeated.state.drafts, originalDrafts);
+  assert.equal(calls.emails, 0);
+  assert.equal(calls.calendar, 0);
+  assert.equal(calls.linkedin, 0);
+  assert.equal(calls.ai, 0);
+});
+
+test("live import feedback reports scanned counts without bypassing the daily import cap", async () => {
+  const { services, calls } = harness();
+  const state = liveState();
+  const targetId = state.targets[0].id;
+  state.usage.profiles = 19;
+  services.scrapeSearch = async () => [0, 1, 2].map(index => ({
+    ...state.contacts[0], id: `new-person-${index}`, name: `New Person ${index}`,
+    linkedinUrl: `https://www.linkedin.com/in/new-person-${index}/`,
+  }));
+  const result = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
+  assert.deepEqual(result.data, { imported: 1, scanned: 3, alreadyAdded: 0 });
+  assert.equal(result.state.usage.profiles, 20);
+  assert.equal(result.state.contacts.length, state.contacts.length + 1);
+  assert.match(result.message!, /Daily import limit applied/);
+  assert.equal(calls.emails, 0);
+});
+
+test("empty live imports explain unreadable results instead of reporting duplicate people", async () => {
+  const { services, calls } = harness();
+  const state = liveState();
+  await assert.rejects(applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services), /No readable people.*results to load/);
+  assert.equal(calls.emails, 0);
+});
+
+test("demo import metadata describes fictional examples and does not read a page or send", async () => {
+  const { services, calls } = harness();
+  services.scrapeSearch = async () => { throw new Error("Demo must not read a live page"); };
+  const state = createDemoState();
+  const first = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services);
+  assert.deepEqual(first.data, { imported: 0, scanned: 6, alreadyAdded: 6 });
+  assert.match(first.message!, /fictional demo people.*No LinkedIn page was read/);
+  state.contacts = [];
+  const added = await applyAction(state, { type: "SCRAPE_SEARCH", targetId: state.targets[0].id }, services);
+  assert.deepEqual(added.data, { imported: 6, scanned: 6, alreadyAdded: 0 });
+  assert.equal(added.state.contacts.length, 6);
+  assert.equal(added.state.usage.profiles, 0);
+  assert.match(added.message!, /fictional demo people added.*No LinkedIn page was read/);
+  assert.equal(calls.emails, 0);
+  assert.equal(calls.linkedin, 0);
+  assert.equal(calls.calendar, 0);
+});

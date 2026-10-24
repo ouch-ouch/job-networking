@@ -3,6 +3,18 @@ import type { Action, ActionResult, AppState } from "./types";
 import { getState, subscribe } from "./storage";
 import { executeAction } from "./engine";
 
+function waitForImport<T>(request: Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(
+      "LinkedIn import did not respond. Reload the extension, reopen this panel, and try again.",
+    )), 20_000);
+    request.then(
+      (result) => { clearTimeout(timer); resolve(result); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
+
 export function useStore() {
   const [state, setState] = useState<AppState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,10 +54,13 @@ export function useStore() {
       try {
         let result: ActionResult;
         if (typeof chrome !== "undefined" && chrome.runtime?.id) {
-          const response = (await chrome.runtime.sendMessage({
+          const request = chrome.runtime.sendMessage({
             type: "APP_ACTION",
             action,
-          })) as { ok: boolean; result?: ActionResult; error?: string };
+          });
+          const response = (await (action.type === "SCRAPE_SEARCH"
+            ? waitForImport(request)
+            : request)) as { ok: boolean; result?: ActionResult; error?: string };
           if (!response?.ok || !response.result)
             throw new Error(
               response?.error ||

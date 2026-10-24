@@ -49,6 +49,12 @@ Restart `npm run server` after backend or `.env` changes. At `chrome://extension
 
 The current people-search screen says **“Find a shared path”** and has a **“Create smart searches”** button. **“Find a warm way in”** identifies an older loaded build. If needed, use **Load unpacked** again and check that you selected this clone's `dist` directory.
 
+### If LinkedIn import appears unresponsive
+
+In live mode, open a **LinkedIn people-results page** (`linkedin.com/search/results/people/`) in the active Chrome tab, then use the extension side panel. Google/Bing search pages and individual profiles are not import sources; add those people manually. The import footer shows whether the active tab is ready and disables Import when the source is unsupported. The normal browser preview cannot import live pages.
+
+While reading, the button says **Importing…**. Errors and duplicate-only results remain beside the button. If everyone on the page was already added to this target, the app explains that instead of silently importing zero people. A missing or stale reader is refreshed once automatically; an unavailable reader times out with a visible error. Reload the extension after pulling/rebuilding the code. The daily limit is 20 newly imported profiles; manual contacts remain available.
+
 ### Before reporting a live test as successful
 
 Run `npm test` and `npm run build`. Live job parsing and search planning have been exercised with Grok; the automated suite uses mocks for Gmail/Calendar and never sends real outreach. For an end-to-end test, use a separate inbox you control, confirm its address in the contact form, generate/review/approve/send one message, reply from that inbox, and check reply detection. Create a test Calendar event only when you intend to send its attendee invitation. See the detailed verification steps in [backend/SETUP.md](backend/SETUP.md#4-verify-real-actions-in-order).

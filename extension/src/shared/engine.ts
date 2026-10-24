@@ -761,9 +761,14 @@ export async function applyAction(
             nextActionAt: undefined,
           }));
         state.contacts.push(...additions);
+        data = {
+          imported: additions.length,
+          scanned: examples.length,
+          alreadyAdded: examples.length - additions.length,
+        };
         message = additions.length
-          ? `${additions.length} fictional demo contacts added. No LinkedIn page was read.`
-          : "The six demo contacts are already on this target.";
+          ? `${additions.length} fictional demo people added. No LinkedIn page was read.`
+          : `All ${examples.length} fictional demo people are already added to this target. No LinkedIn page was read.`;
       } else {
         const remaining =
           Math.min(20, state.settings.dailyScrapeLimit) - state.usage.profiles;
@@ -772,15 +777,19 @@ export async function applyAction(
             "Daily profile limit reached. You can add a contact by hand.",
           );
         const contacts = await services.scrapeSearch(target, state.profile);
+        if (!contacts.length)
+          throw new Error(
+            "No readable people were found on the open page. Wait for LinkedIn results to load, open a people search, or add a contact manually.",
+          );
+        const alreadyAddedToTarget = (person: Contact) =>
+          state.contacts.some(
+            (existing) =>
+              existing.targetId === target.id &&
+              existing.linkedinUrl === person.linkedinUrl,
+          );
+        const alreadyAdded = contacts.filter(alreadyAddedToTarget).length;
         const additions = contacts
-          .filter(
-            (person) =>
-              !state.contacts.some(
-                (existing) =>
-                  existing.targetId === target.id &&
-                  existing.linkedinUrl === person.linkedinUrl,
-              ),
-          )
+          .filter((person) => !alreadyAddedToTarget(person))
           .slice(0, remaining);
         state.contacts.push(...additions);
         state.usage.profiles += additions.length;
@@ -791,7 +800,14 @@ export async function applyAction(
             "contact_added",
             `${contact.name} imported from your open LinkedIn page.`,
           );
-        message = `${additions.length} contacts imported.`;
+        data = {
+          imported: additions.length,
+          scanned: contacts.length,
+          alreadyAdded,
+        };
+        message = additions.length
+          ? `${additions.length} ${additions.length === 1 ? "person" : "people"} imported.${alreadyAdded ? ` ${alreadyAdded} already added to this target.` : ""}${additions.length < contacts.length - alreadyAdded ? " Daily import limit applied." : ""}`
+          : `All ${contacts.length} visible people are already added to this target. Open another results page or choose another target.`;
       }
       break;
     }
