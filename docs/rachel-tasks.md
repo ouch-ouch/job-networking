@@ -16,13 +16,13 @@ Role A in SPEC §9 covers the side panel UI, the demo, `mock.ts`, `job-page.ts`,
 | Extension key | Pinned extension ID **`baeippkikgolnalkpiabdfhidjpploaa`**. The private key is at `C:\Users\rache\Downloads\coffee-chat-copilot-extension-key.pem`. It's not in the repo, and `*.pem` is now gitignored. The public key is below for D |
 
 ### Screens (all of §9 "A")
-- **Targets:** "Network for this job" (grab the open page) or paste a job description or URL → extracted fields → "Find people on LinkedIn" → contacts ranked by relevance with warm-path badges, reason, connection degree, and email confidence → "Draft N messages" (email or LinkedIn note). Add contacts by hand. Expanding a contact card shows its meeting, prep brief, and notes.
+- **Targets:** "Network for this job" (grab the open page) or paste a job description or URL → extracted fields → "Find people on LinkedIn" → contacts ranked by relevance with warm-path badges, reason, connection degree, and email confidence → "Draft N messages" (email or LinkedIn note). Import all currently visible, readable contacts on the open LinkedIn results page, without a per-import cap or app daily profile quota. Add contacts by hand. Expanding a contact card shows its meeting, prep brief, and notes.
 - **Queue (Approval Queue):** edit, approve, skip, and regenerate. Filled keywords are highlighted, and the AI-written `personal_hook` gets its own color. Other things it handles:
   - LinkedIn notes show a 300-character counter and Approve is blocked over the limit.
   - Email addresses below 50% confidence need an "I checked it" tick, or an edit, before they can be approved.
   - The thank-you's referral ask can be switched off.
   - Approved LinkedIn drafts wait with "Open profile" and "Mark sent" buttons.
-  - The header shows "N/30 emails today".
+  - The header shows today's email count without a daily quota or quota-progress denominator.
 - **Questions:** AI suggestion cards with Add / Skip that you can edit first, "Suggest more", writing your own, and the bank grouped by category with ★ landed-well counts and used-N× counts.
 - **Prep brief:** shown on a scheduled contact's card. It has Generate / Regenerate and renders the markdown. Any picked question that isn't approved yet shows as "new" with an "Add to bank" button.
 - **Post-chat notes:** a "How did it go with X?" banner appears once a meeting ends. Notes plus "which questions landed well" checkboxes → a thank-you + referral ask goes to the queue.

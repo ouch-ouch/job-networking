@@ -255,8 +255,6 @@ export function createDemoState(now = Date.now()): AppState {
       backendUrl: "http://127.0.0.1:8787",
       googleConnected: false,
       emailThreshold: 0.8,
-      dailyEmailLimit: 30,
-      dailyScrapeLimit: 20,
     },
     usage: {
       date: new Date(now).toISOString().slice(0, 10),

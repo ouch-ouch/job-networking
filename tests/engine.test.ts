@@ -158,7 +158,7 @@ test("turning off demo mode cannot send fictional contacts", async () => {
   assert.equal(calls.emails, 0);
 });
 
-test("confidence, opt-out and daily limits are enforced at send time", () => {
+test("confidence and opt-out gates remain enforced without daily send quotas", () => {
   const state = liveState();
   const draft = state.drafts[0];
   draft.status = "approved";
@@ -166,17 +166,19 @@ test("confidence, opt-out and daily limits are enforced at send time", () => {
   contact.emailConfidence = 0.5;
   assert.throws(() => validateSend(state, draft), /confidence threshold/);
   contact.emailConfidence = 0.95;
-  state.usage.emails = 30;
-  assert.throws(() => validateSend(state, draft), /Daily email limit/);
-  state.usage.emails = 0;
+  state.usage.emails = 1000;
+  (state.settings as AppState["settings"] & { dailyEmailLimit: number }).dailyEmailLimit = 1;
+  assert.doesNotThrow(() => validateSend(state, draft));
   contact.optedOut = true;
   assert.throws(() => validateSend(state, draft), /opted out/);
 });
 
-test("a successful live send records the Gmail thread and consumes one daily send", async () => {
+test("live sends remain allowed at high usage despite an old saved email quota", async () => {
   const { services, calls } = harness();
   const state = liveState();
   state.drafts[0].status = "approved";
+  state.usage.emails = 1000;
+  (state.settings as AppState["settings"] & { dailyEmailLimit: number }).dailyEmailLimit = 1;
   const result = await applyAction(
     state,
     { type: "SEND_EMAIL", draftId: state.drafts[0].id },
@@ -185,7 +187,7 @@ test("a successful live send records the Gmail thread and consumes one daily sen
   assert.equal(calls.emails, 1);
   assert.equal(result.state.contacts[0].threadId, "thread");
   assert.equal(result.state.contacts[0].stage, "sent");
-  assert.equal(result.state.usage.emails, 1);
+  assert.equal(result.state.usage.emails, 1001);
 });
 
 test("scheduler queues one draft, never sends, and a reply cancels queued follow-ups", async () => {
@@ -1071,21 +1073,23 @@ test("live search import reports new and already-added people, including repeate
   assert.equal(calls.ai, 0);
 });
 
-test("live import feedback reports scanned counts without bypassing the daily import cap", async () => {
+test("live imports exceed 20 people despite high usage and an old saved profile quota", async () => {
   const { services, calls } = harness();
   const state = liveState();
   const targetId = state.targets[0].id;
-  state.usage.profiles = 19;
-  services.scrapeSearch = async () => [0, 1, 2].map(index => ({
+  state.usage.profiles = 1000;
+  (state.settings as AppState["settings"] & { dailyScrapeLimit: number }).dailyScrapeLimit = 1;
+  services.scrapeSearch = async () => Array.from({ length: 35 }, (_, index) => ({
     ...state.contacts[0], id: `new-person-${index}`, name: `New Person ${index}`,
     linkedinUrl: `https://www.linkedin.com/in/new-person-${index}/`,
   }));
   const result = await applyAction(state, { type: "SCRAPE_SEARCH", targetId }, services);
-  assert.deepEqual(result.data, { imported: 1, scanned: 3, alreadyAdded: 0 });
-  assert.equal(result.state.usage.profiles, 20);
-  assert.equal(result.state.contacts.length, state.contacts.length + 1);
-  assert.match(result.message!, /Daily import limit applied/);
-  assert.equal(calls.emails, 0);
+  assert.deepEqual(result.data, { imported: 35, scanned: 35, alreadyAdded: 0 });
+  assert.equal(result.state.usage.profiles, 1035);
+  assert.equal(result.state.contacts.length, state.contacts.length + 35);
+  assert.doesNotMatch(result.message!, /Daily (?:import|profile) limit/);
+  assert.deepEqual(result.state.drafts, state.drafts);
+  assert.equal(calls.emails + calls.linkedin + calls.calendar, 0);
 });
 
 test("empty live imports explain unreadable results instead of reporting duplicate people", async () => {

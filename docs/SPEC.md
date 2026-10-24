@@ -22,7 +22,7 @@ Platform: Chrome MV3 extension on job portals, LinkedIn, Gmail, and X; Chromium/
 | 4 | Message templates | Write **one** template with `{{placeholders}}`; AI only fills placeholders and keeps your wording | **No** reusable message bodies or placeholder templates; every message is composed fresh for the person, job, and thread | Template mode for [Email]/[LinkedIn]; per-person composition for [X] (§7) |
 | 5 | Sending | Email sends through the Gmail API after approval | "No endpoint for posting or sending exists in MVP"; the user sends in native X | Gmail send exists for [Email] only; [LinkedIn] and [X] are always sent by the user in the native site |
 | 6 | Finding emails | Guess work emails from patterns (`first.last@` etc.) with a confidence score (P0) | "Contact-email harvesting" is outside the build | Email guessing kept for [Email]; never used on X data |
-| 7 | Scraping | Scrape LinkedIn people-search results and profiles the user opens | No private-account scraping, no cookie extraction, no continuous timeline/DM reading | LinkedIn scraping kept with the §13 limits; X capture is user-invoked, public pages only |
+| 7 | Scraping | Scrape LinkedIn people-search results and profiles the user opens | No private-account scraping, no cookie extraction, no continuous timeline/DM reading | LinkedIn reading follows the §13 approval and page-access rules; X capture is user-invoked, public pages only |
 | 8 | AI provider + model | Grok `grok-4.7` via Snowflake Cortex REST; fallback `claude-sonnet-4-6`; Cortex AI SQL functions | xAI API with X Search; model configured server-side and validated at setup, never hardcoded across the app | Cortex for the agent loop, drafting, and SQL AI functions; xAI X Search adapter for X research. (The hackathon spec doesn't establish that Cortex offers X Search, so X research needs the xAI API.) |
 | 9 | Backend + storage | `chrome.storage.local` as source of truth + Snowflake tables via `/sync`; Vercel backend | Node/TS backend, PostgreSQL, durable background-job runner; hosting vendor not fixed | Hackathon tier = storage.local + Snowflake on Vercel; production tier = Postgres + durable jobs (§10) |
 | 10 | Follow-up cadence | No reply after 3 days, then 7; max 2 follow-ups, then "cold"; drafts auto-queued for approval | Reminder suggested after 7 days; at most 1 gentle follow-up, then pause until resumed; reminders only | Per channel: [Email]/[LinkedIn] use 3/7/max 2; [X] uses 7/max 1 (§9) |
@@ -164,7 +164,7 @@ Use canonical URL + employer job ID when available for deduplication. Re-evaluat
 
 ### 4.3 [Email]/[LinkedIn] Template outreach flow
 
-1. **Find people.** The extension opens a LinkedIn people search for the company (e.g. `"<company>" <role keywords>`, plus an NYU alumni filter) and scrapes the results page. Contacts are ranked with **warm paths first**: NYU alumni, shared past employers, shared clubs or orgs, and 2nd-degree connections. Each gets a relevance score and a one-line reason ("NYU '22, same team as the role"). The extension then finds or guesses each contact's work email.
+1. **Find people.** The extension opens a LinkedIn people search for the company (e.g. `"<company>" <role keywords>`, plus an NYU alumni filter) and reads all currently visible, readable contacts on that results page, without a per-import cap or app daily profile quota. The user opens each additional results page before importing it. Contacts are ranked with **warm paths first**: NYU alumni, shared past employers, shared clubs or orgs, and 2nd-degree connections. Each gets a relevance score and a one-line reason ("NYU '22, same team as the role"). The extension then finds or guesses each contact's work email.
 2. **Generate messages.** For each contact, the AI fills the `{{keywords}}` from the job description and the person's profile, and writes `{{personal_hook}}` itself. Output: a LinkedIn note (300 characters max for connection requests) and/or an email (subject + body).
 3. **Approve.** Every draft lands in the **Approval Queue**. The user can edit, regenerate, approve, or skip. **Nothing sends without approval.**
 4. **Send.** Email goes out through the Gmail API. LinkedIn: after approval, the content script opens the profile and fills in the connect note or message box. **The user clicks Send in LinkedIn**, and the extension then marks the message as sent. This keeps the LinkedIn account safe.
@@ -717,7 +717,7 @@ Retry transient provider errors with bounded exponential backoff and jitter; res
 - **LinkedIn: the extension fills, the user sends.** The extension never clicks Send on LinkedIn. Scraping only reads pages the user has opened themselves, one at a time.
 - **X: the user sends in native X.** MVP research and drafting never clicks Send, Reply, Follow, or Like and never uses unattended action queues. Copying a draft never marks it sent.
 - X restricts unsolicited automated replies/DMs, automated likes, and AI reply bots; current guidance requires written approval for AI reply bots [S4]. Any later sending integration needs a fresh access and policy review; user review alone is not evidence that every automation pattern is permitted.
-- **Rate limits:** cap scraping at about 20 profiles/day and email at about 30/day.
+- **App quotas:** no app-imposed daily email or profile-import quotas. Import all currently visible, readable contacts on the user-opened results page; do not paginate or navigate automatically. Provider-imposed restrictions still apply.
 - **LinkedIn ToS:** LinkedIn's User Agreement prohibits scraping and automation, so the account could still be flagged. Keep volume low, use a test account for the demo, and be ready to explain the human-in-the-loop design if judges ask.
 - **Email guesses:** only send to guessed addresses above a confidence threshold, and show the confidence in the approval card so the user decides.
 - Stop following up as soon as someone replies or says no. Every email includes an easy opt-out line. Respect declines immediately.
@@ -756,7 +756,7 @@ The three master's students take the hardest parts: extension internals, DOM scr
 - Service worker message router: wires every action in `messages.ts` to B's and C's functions
 - Draft state machine: `pending → approved → sent / failed`, and moving `Contact.stage` forward
 - `chrome.alarms` scheduler: follow-ups, reply polling, prep-brief trigger, post-meeting thank-you trigger, demo-mode intervals
-- Rate limits + "stop on reply" logic
+- Import deduplication + "stop on reply" logic; no app daily email/profile quotas
 - **Hour 0 deliverable:** scaffold + shared types pushed by 0:20 so everyone can start
 
 **B — LinkedIn + Google channels** *(master's student)*. LinkedIn's DOM is messy and changes often, so this role takes the most debugging. It also owns the Gmail and Calendar integration, since those are the other outreach channels.
@@ -900,6 +900,7 @@ coffee-chat-copilot/
 - Compare drafts for people with different evidenced communication styles: strategy and wording respond to their posts, preserve the user's voice, and do not reuse a message skeleton. Sparse evidence falls back to a neutral voice; unsupported personality claims fail review.
 - [Email]/[LinkedIn] template drafts change only `{{placeholders}}`; LinkedIn connect notes over 300 characters are rejected in code.
 - Nothing sends without approval; the Grok agent has no send tool; prep briefs only pick `approved` questions.
+- LinkedIn import reads all currently visible, readable contacts on the open results page without a per-import cap or app daily profile quota. Email sends have no app daily quota. Deduplication and explicit approval remain enforced.
 - A text PDF or pasted resume produces editable facts; unsupported/scanned files present a useful fallback. Unconfirmed or excluded facts do not appear in research/draft payloads.
 - A discovery run returns source-linked results or an honest empty state; missing company evidence is displayed as unknown. A fabricated source ID/URL in model narrative fails validation.
 - Company lookup handles ambiguous names, supports an optional job/role, and returns up to three source-backed contacts without padding weak results. Find-more excludes existing results; shared interests alone never imply a personal connection.

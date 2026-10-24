@@ -127,8 +127,6 @@ export type Settings = {
   backendUrl: string;
   googleConnected: boolean;
   emailThreshold: number;
-  dailyEmailLimit: number;
-  dailyScrapeLimit: number;
 };
 export type AppState = {
   version: 1;

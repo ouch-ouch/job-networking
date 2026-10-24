@@ -53,7 +53,7 @@ The current people-search screen says **“Find a shared path”** and has a **�
 
 In live mode, open a **LinkedIn people-results page** (`linkedin.com/search/results/people/`) in the active Chrome tab, then use the extension side panel. Google/Bing search pages and individual profiles are not import sources; add those people manually. The import footer shows whether the active tab is ready and disables Import when the source is unsupported. The normal browser preview cannot import live pages.
 
-While reading, the button says **Importing…**. Errors and duplicate-only results remain beside the button. If everyone on the page was already added to this target, the app explains that instead of silently importing zero people. A missing or stale reader is refreshed once automatically; an unavailable reader times out with a visible error. Reload the extension after pulling/rebuilding the code. The daily limit is 20 newly imported profiles; manual contacts remain available.
+While reading, the button says **Importing…**. Errors and duplicate-only results remain beside the button. If everyone on the page was already added to this target, the app explains that instead of silently importing zero people. A missing or stale reader is refreshed once automatically; an unavailable reader times out with a visible error. Reload the extension after pulling/rebuilding the code. Imports include all readable contacts currently visible on the open results page, without a per-import cap or app daily profile quota. Open each additional results page yourself before importing it.
 
 ### Before reporting a live test as successful
 
@@ -113,14 +113,14 @@ AI now uses **Grok (xAI)** through the xAI Responses API with structured JSON Sc
 
 - Profile, one message template, job description parsing, manual contacts, target filtering, contact search and warm-path ranking.
 - Grok search plans use the full job description, role, team, company and saved profile to propose 3–6 searches for alumni, similar backgrounds, relevant teams and recruiting contacts. Each query is editable and opens in Google or Bing. These are search hypotheses to review, not verified people or connections. A manual LinkedIn search starts with the company only, with optional role or school presets.
-- Active-tab LinkedIn people search import (up to 20 visible results, including whole-card result layouts), explicit-domain email pattern guesses, confirmed-email correction, and job text capture from supported job sites. People found elsewhere on the web can be added manually.
+- Active-tab LinkedIn people search import of all currently visible, readable results, including whole-card result layouts, explicit-domain email pattern guesses, confirmed-email correction, and job text capture from supported job sites. People found elsewhere on the web can be added manually.
 - Nine AI backend endpoints using Grok (xAI) structured JSON Schema output, input/output validation, preserved literal template wording, and a hard 300-character LinkedIn note limit.
 - Editable approval queue with separate approval/send steps, skipped/sent views, approval revocation on edits, and explicit delivery recovery for interrupted sends.
 - Gmail OAuth, Unicode MIME sending, thread-based reply polling/classification, scheduling replies, Calendar invitations and Meet provisioning.
 - Service-worker alarms, duplicate follow-up prevention, a two-follow-up maximum, opt-out cancellation, and a final reply check before sending a follow-up.
 - Editable question suggestions/bank, approved-bank prep briefs, Calendar description updates, post-chat notes, and thank-you/referral drafts.
 - Per-contact messages and history, activity timeline, scheduled meetings, and persistent isolated demo/live workspaces.
-- Daily limits of 30 email attempts and 20 imported profiles. Guesses below 80% confidence are blocked until the address is confirmed. Email guesses are explicitly unverified, not deliverability checks.
+- No app-imposed daily email or profile-import quotas. Guesses below 80% confidence are blocked until the address is confirmed. Email guesses are explicitly unverified, not deliverability checks.
 
 ## Demo boundaries
 
@@ -138,7 +138,7 @@ npm test
 npm run build
 ```
 
-Tests cover approval and recipient changes, mode isolation, follow-up and reply state transitions, email confidence/rate limits, content-script boundaries, template contracts, MIME, Calendar validation, and backend HTTP contracts with mocked provider calls. Tests never send real outreach. HTTP tests bind temporary localhost ports.
+Tests cover approval and recipient changes, mode isolation, follow-up and reply state transitions, email confidence checks, imports without app daily quotas, content-script boundaries, template contracts, MIME, Calendar validation, and backend HTTP contracts with mocked provider calls. Tests never send real outreach. HTTP tests bind temporary localhost ports.
 
 ## Structure
 

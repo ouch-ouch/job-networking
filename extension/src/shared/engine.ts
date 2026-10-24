@@ -202,8 +202,6 @@ export function validateSend(state: AppState, draft: Draft): Contact {
       throw new Error(
         `This email is unverified and below the ${Math.round(state.settings.emailThreshold * 100)}% confidence threshold.`,
       );
-    if (state.usage.emails >= Math.min(30, state.settings.dailyEmailLimit))
-      throw new Error("Daily email limit reached. Try again tomorrow.");
   }
   if (!state.settings.demoMode) {
     requireLiveContact(contact);
@@ -573,20 +571,6 @@ export async function applyAction(
             action.settings.emailThreshold ?? state.settings.emailThreshold,
           ),
         ),
-        dailyEmailLimit: Math.max(
-          1,
-          Math.min(
-            30,
-            action.settings.dailyEmailLimit ?? state.settings.dailyEmailLimit,
-          ),
-        ),
-        dailyScrapeLimit: Math.max(
-          1,
-          Math.min(
-            20,
-            action.settings.dailyScrapeLimit ?? state.settings.dailyScrapeLimit,
-          ),
-        ),
       };
       // A stored flag is never sufficient to establish a Google connection.
       if ("googleConnected" in action.settings)
@@ -772,12 +756,6 @@ export async function applyAction(
           ? `${additions.length} fictional demo people added. No LinkedIn page was read.`
           : `All ${examples.length} fictional demo people are already added to this target. No LinkedIn page was read.`;
       } else {
-        const remaining =
-          Math.min(20, state.settings.dailyScrapeLimit) - state.usage.profiles;
-        if (remaining <= 0)
-          throw new Error(
-            "Daily profile limit reached. You can add a contact by hand.",
-          );
         const contacts = await services.scrapeSearch(target, state.profile);
         if (!contacts.length)
           throw new Error(
@@ -790,9 +768,7 @@ export async function applyAction(
               existing.linkedinUrl === person.linkedinUrl,
           );
         const alreadyAdded = contacts.filter(alreadyAddedToTarget).length;
-        const additions = contacts
-          .filter((person) => !alreadyAddedToTarget(person))
-          .slice(0, remaining);
+        const additions = contacts.filter((person) => !alreadyAddedToTarget(person));
         state.contacts.push(...additions);
         state.usage.profiles += additions.length;
         for (const contact of additions)
@@ -808,7 +784,7 @@ export async function applyAction(
           alreadyAdded,
         };
         message = additions.length
-          ? `${additions.length} ${additions.length === 1 ? "person" : "people"} imported.${alreadyAdded ? ` ${alreadyAdded} already added to this target.` : ""}${additions.length < contacts.length - alreadyAdded ? " Daily import limit applied." : ""}`
+          ? `${additions.length} ${additions.length === 1 ? "person" : "people"} imported.${alreadyAdded ? ` ${alreadyAdded} already added to this target.` : ""}`
           : `All ${contacts.length} visible people are already added to this target. Open another results page or choose another target.`;
       }
       break;

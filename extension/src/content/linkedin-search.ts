@@ -137,7 +137,6 @@ export function scrapeLinkedInSearch(
       profile,
     );
     if (contact) contacts.set(linkedinUrl, contact);
-    if (contacts.size >= 20) break;
   }
   return [...contacts.values()].sort(
     (a, b) =>

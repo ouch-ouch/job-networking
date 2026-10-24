@@ -1563,7 +1563,7 @@ function PeopleSearchDialog({
           <Linkedin size={20} />
           <p>
             Review the LinkedIn results, then use this extension’s side panel
-            on that tab to import up to 20 visible people. Use LinkedIn’s
+            on that tab to import the visible people. Use LinkedIn’s
             Current companies filter to narrow to employees.
           </p>
         </div>
@@ -2914,8 +2914,6 @@ function SettingsPage({
             <div className="limits-line">
               <ShieldCheck size={16} />
               <span>
-                30 emails/day · 20 profiles/day
-                <br />
                 Guessed email threshold:{" "}
                 {Math.round(s.settings.emailThreshold * 100)}%
               </span>
