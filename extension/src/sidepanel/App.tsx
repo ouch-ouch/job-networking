@@ -1395,7 +1395,7 @@ function PeopleSearchDialog({
   return (
     <Dialog
       title="Find a shared path."
-      subtitle="Let Grok turn your job and profile into searches across the web."
+      subtitle="Search LinkedIn for people at this company, then import them."
       onClose={onClose}
     >
       <div className="dialog-body">
@@ -1412,6 +1412,68 @@ function PeopleSearchDialog({
             ))}
           </select>
         </label>
+        <section className="linkedin-search" aria-label="Search LinkedIn">
+          <h3>
+            <Linkedin size={18} /> Search LinkedIn
+          </h3>
+          <div className="linkedin-search-buttons">
+            {([
+              ["company", "Company only", `Everyone at ${target?.company || "the company"}`],
+              ["role", "Company + role", `People in ${target?.role || "this role"}`],
+              ["alumni", "Company + school", state.profile.school.trim() ? `${state.profile.school} alumni there` : "Add your school in Settings"],
+            ] as const).map(([scope, label, detail]) => {
+              const query = target ? buildLinkedInSearchQuery(target, state.profile, scope) : "";
+              return query ? (
+                <a
+                  key={scope}
+                  className="button primary full linkedin-search-button"
+                  href={buildLinkedInSearchUrl(target!, state.profile, { keywords: query })}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setKeywords(query)}
+                >
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{detail}</small>
+                  </span>
+                  <ExternalLink size={15} />
+                </a>
+              ) : (
+                <button key={scope} className="button primary full linkedin-search-button" disabled>
+                  <span>
+                    <strong>{label}</strong>
+                    <small>{detail}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="field-help">
+            LinkedIn opens in a new tab. Review the results, then come back here
+            and press Import LinkedIn results to add up to 20 people.
+          </p>
+          <details className="manual-people-search">
+            <summary>Use your own keywords</summary>
+            <label className="field">
+              LinkedIn search keywords
+              <input
+                value={keywords}
+                onChange={(e) => setKeywords(e.target.value)}
+                placeholder="Enter the company’s LinkedIn name"
+              />
+            </label>
+            {searchUrl ? (
+              <a className="button outline full" href={searchUrl} target="_blank" rel="noreferrer">
+                Open LinkedIn search <ExternalLink size={15} />
+              </a>
+            ) : (
+              <button className="button outline full" disabled>
+                Enter search keywords first
+              </button>
+            )}
+          </details>
+        </section>
+        <h3 className="people-more-heading">More ways to find people</h3>
         <div className="callout search-context">
           <AtSign size={20} />
           <p>
@@ -1543,66 +1605,6 @@ function PeopleSearchDialog({
             </p>
           </div>
         )}
-        <details className="manual-people-search">
-          <summary>Search LinkedIn manually</summary>
-        <label className="field">
-          LinkedIn search keywords
-          <input
-            value={keywords}
-            onChange={(e) => setKeywords(e.target.value)}
-            placeholder="Enter the company’s LinkedIn name"
-          />
-        </label>
-        <div className="people-search-presets" aria-label="Search options">
-          {([
-            ["company", "Company only"],
-            ["role", "Company + role"],
-            ["alumni", "Company + school"],
-          ] as const).map(([scope, label]) => {
-            const query = target
-              ? buildLinkedInSearchQuery(target, state.profile, scope)
-              : "";
-            return (
-              <button
-                key={scope}
-                className="button outline compact"
-                disabled={!query}
-                aria-pressed={Boolean(query && keywords === query)}
-                onClick={() => setKeywords(query)}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-        <p className="field-help">
-          No results? Choose Company only or edit the keywords to match the
-          company’s LinkedIn name. Your school is optional; shared connections
-          are ranked after import.
-        </p>
-        {searchUrl ? (
-          <a
-            className="button outline full"
-            href={searchUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open LinkedIn search <ExternalLink size={15} />
-          </a>
-        ) : (
-          <button className="button outline full" disabled>
-            Enter search keywords first
-          </button>
-        )}
-        <div className="callout">
-          <Linkedin size={20} />
-          <p>
-            Review the LinkedIn results, then use this extension’s side panel
-            on that tab to import up to 20 visible people. Use LinkedIn’s
-            Current companies filter to narrow to employees.
-          </p>
-        </div>
-        </details>
       </div>
       <div className="dialog-footer people-import-footer">
         <p className="import-source-hint">

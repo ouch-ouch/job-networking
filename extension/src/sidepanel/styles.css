@@ -4856,3 +4856,53 @@ hr {
 .demo-strip > button + button {
   margin-left: 14px;
 }
+
+/* LinkedIn search: the main way to find people, shown first. */
+.linkedin-search {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--sage);
+}
+.linkedin-search h3,
+.people-more-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  color: #1d2a22;
+}
+.people-more-heading {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #3f4a42;
+}
+.linkedin-search-buttons {
+  display: grid;
+  gap: 8px;
+}
+.button.primary.linkedin-search-button {
+  justify-content: space-between;
+  text-align: left;
+  padding: 11px 14px;
+  background: var(--green-dark);
+  text-decoration: none;
+}
+.button.primary.linkedin-search-button:hover:not(:disabled) {
+  background: #17331f;
+}
+.linkedin-search-button span {
+  display: grid;
+  gap: 2px;
+}
+.linkedin-search-button strong {
+  font-size: 14px;
+}
+.linkedin-search-button small {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.85;
+}
