@@ -5011,3 +5011,83 @@ hr {
   font-size: 12px;
   font-weight: 600;
 }
+
+/* Sign in with Google */
+.signin-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px 16px;
+  background: var(--cream);
+}
+.signin-card {
+  width: 100%;
+  max-width: 420px;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  padding: 36px 28px 24px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 10px 30px #243c3214;
+  text-align: center;
+}
+.signin-card h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #1d2a22;
+}
+.signin-lede {
+  margin: 0;
+  color: #3f4a42;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.button.signin-google {
+  width: 100%;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid #c9d0c5;
+  background: #fff;
+  color: #1f1f1f;
+  font-weight: 600;
+  font-size: 15px;
+}
+.button.signin-google:hover:not(:disabled) {
+  background: #f6f8f5;
+}
+.signin-points {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  text-align: left;
+  color: #3f4a42;
+  font-size: 13px;
+}
+.signin-points li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.signin-points svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--green);
+}
+.google-mark {
+  flex-shrink: 0;
+}
+.account-photo {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.integration-symbol.gmail-symbol {
+  background: #fff;
+}

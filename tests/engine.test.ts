@@ -46,7 +46,8 @@ function harness() {
       };
       return answers[endpoint] as T;
     },
-    connectGoogle: async () => ({ email: "me@real-company.com" }),
+    connectGoogle: async () => ({ email: "me@real-company.com", name: "Real Person" }),
+    disconnectGoogle: async () => undefined,
     sendEmail: async () => {
       calls.emails++;
       return { id: "message", threadId: "thread" };
@@ -473,70 +474,35 @@ test("manual addresses need verification and recipient changes revoke every unse
   assert.equal(added.stage, "found");
 });
 
-test("demo and live workspaces persist independently through switches and demo reset", async () => {
+test("a saved demo workspace opens as an empty live workspace that keeps your profile", async () => {
   const demo = createDemoState();
   demo.profile.name = "My personal profile";
   demo.settings.backendUrl = "http://localhost:8787";
   await saveState(demo);
-  let result = await executeAction({
-    type: "UPDATE_SETTINGS",
-    settings: { demoMode: false },
-  });
-  assert.equal(result.state.settings.demoMode, false);
-  assert.equal(result.state.contacts.length, 0);
-  assert.equal(result.state.targets.length, 0);
-  assert.equal(result.state.drafts.length, 0);
-  assert.equal(result.state.activities.length, 0);
-  assert.equal(result.state.meetings.length, 0);
-  assert.equal(result.state.questions.length, 0);
-  assert.equal(result.state.profile.name, "My personal profile");
-  assert.equal(result.state.settings.backendUrl, "http://localhost:8787");
+  const state = await getState();
+  assert.equal(state.settings.demoMode, false);
+  assert.equal(state.contacts.length, 0);
+  assert.equal(state.targets.length, 0);
+  assert.equal(state.drafts.length, 0);
+  assert.equal(state.meetings.length, 0);
+  assert.equal(state.profile.name, "My personal profile");
+  assert.equal(state.settings.backendUrl, "http://localhost:8787");
+  assert.equal(state.settings.googleConnected, false);
+  assert.equal((await getState()).settings.demoMode, false);
+});
+
+test("signing in with Google saves the account and fills an empty name; signing out clears it", async () => {
+  const { services } = harness();
+  const live = createDemoState();
+  live.settings.demoMode = false;
+  live.profile.name = "";
+  let result = await applyAction(live, { type: "CONNECT_GOOGLE" }, services);
+  assert.equal(result.state.settings.googleConnected, true);
+  assert.equal(result.state.settings.googleEmail, "me@real-company.com");
+  assert.equal(result.state.profile.name, "Real Person");
+  result = await applyAction(result.state, { type: "DISCONNECT_GOOGLE" }, services);
   assert.equal(result.state.settings.googleConnected, false);
-  const live = result.state;
-  live.targets.push({
-    id: "live_target",
-    company: "Live Company",
-    role: "Engineer",
-    skills: [],
-    rawDescription: "My real opportunity",
-  });
-  live.contacts.push({
-    id: "live_contact",
-    name: "Real Contact",
-    company: "Live Company",
-    title: "Engineer",
-    targetId: "live_target",
-    warmPaths: [],
-    relevance: 80,
-    reason: "Added by me",
-    stage: "found",
-    followUpCount: 0,
-  });
-  live.usage.emails = 3;
-  await saveState(live);
-  await assert.rejects(
-    executeAction({ type: "RESET_DEMO" }),
-    /Switch to Demo mode/,
-  );
-  assert.equal((await getState()).contacts[0].id, "live_contact");
-  result = await executeAction({
-    type: "UPDATE_SETTINGS",
-    settings: { demoMode: true },
-  });
-  assert.equal(result.state.contacts.length, 6);
-  assert.ok(
-    result.state.contacts.every((contact) => contact.id.startsWith("demo_")),
-  );
-  assert.equal(result.state.profile.name, "My personal profile");
-  await executeAction({ type: "RESET_DEMO" });
-  result = await executeAction({
-    type: "UPDATE_SETTINGS",
-    settings: { demoMode: false },
-  });
-  assert.equal(result.state.contacts.length, 1);
-  assert.equal(result.state.contacts[0].id, "live_contact");
-  assert.equal(result.state.targets[0].id, "live_target");
-  assert.equal(result.state.usage.emails, 3);
+  assert.equal(result.state.settings.googleEmail, undefined);
 });
 
 test("new replies preserve scheduled, met, and thanked stages without stale scheduling drafts", async () => {

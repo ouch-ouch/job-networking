@@ -23,7 +23,6 @@ import {
   Coffee,
   AtSign,
   Copy,
-  Presentation,
   ExternalLink,
   FileText,
   Inbox,
@@ -54,7 +53,6 @@ import type {
   Contact,
   Draft,
   Meeting,
-  DemoSceneId,
   PeopleSearchPlan,
   Profile,
   Question,
@@ -63,7 +61,6 @@ import type {
   Target,
 } from "../shared/types";
 import { useStore } from "../shared/useStore";
-import { DEMO_SCENES, SAMPLE_JOB_POSTING } from "../shared/demoScenes";
 import { TemplateEditor, TemplatePreview } from "./TemplateEditor";
 import { readResumeFile } from "./resumeFile";
 import { extractResumeBasics, resumeKeywords } from "../shared/resume";
@@ -269,41 +266,6 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState("");
   const [queueTab, setQueueTab] = useState("pending");
-  const [presenter, setPresenter] = useState(false);
-  /** Load a presentation scene and jump to the screen it's about. */
-  async function loadScene(scene: DemoSceneId) {
-    const result = await run({ type: "LOAD_DEMO_SCENE", scene });
-    if (!result) return;
-    setModal(null);
-    setSelected(null);
-    setTargetId("all");
-    setFilter("all");
-    setSearch("");
-    if (scene === "reply") {
-      setQueueTab("pending");
-      setPage("approvals");
-    } else if (scene === "chat") {
-      const meeting = result.state.meetings.find((m) => m.contactId === "demo_maya");
-      if (meeting) openChat(meeting.id);
-      else setPage("chats");
-    } else if (scene === "after") {
-      setPage("network");
-      setSelected("demo_maya");
-    } else setPage("network");
-  }
-  // Alt+1..5 jump to a scene, Alt+0 shows or hides the presenter panel (demo mode only).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!state?.settings.demoMode || !e.altKey) return;
-      const digit = /^Digit(\d)$/.exec(e.code)?.[1];
-      if (digit === undefined) return;
-      e.preventDefault();
-      if (digit === "0") setPresenter((v) => !v);
-      else if (DEMO_SCENES[Number(digit) - 1]) void loadScene(DEMO_SCENES[Number(digit) - 1].id);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  });
   useEffect(() => {
     if (toast) {
       const timeout = setTimeout(() => setToast(""), 4500);
@@ -388,6 +350,8 @@ export default function App() {
       </div>
     );
   const s = state;
+  if (!s.settings.googleConnected && !s.settings.signInSkipped)
+    return <SignInScreen run={run} busy={busy} error={error} />;
   const sent = s.contacts.filter(
     (c) => !["found", "drafted"].includes(c.stage),
   ).length;
@@ -510,12 +474,20 @@ export default function App() {
               <strong>{labels[page]}</strong>
             </div>
             <div className="topbar-right">
-              <span
-                className={`mode-indicator ${s.settings.demoMode ? "demo" : ""}`}
-              >
-                <span />
-                {s.settings.demoMode ? "Demo mode" : "Live"}
-              </span>
+              {s.settings.googleConnected ? (
+                <span className="mode-indicator" title={s.settings.googleEmail}>
+                  <span />
+                  {s.settings.googleEmail || "Signed in"}
+                </span>
+              ) : (
+                <button
+                  className="button outline compact"
+                  disabled={busy}
+                  onClick={() => void run({ type: "CONNECT_GOOGLE" })}
+                >
+                  <GoogleMark /> Sign in with Google
+                </button>
+              )}
               <button
                 className="icon-button notifications"
                 title="View activity"
@@ -526,7 +498,11 @@ export default function App() {
                 {pending.length > 0 && <i />}
               </button>
               <span className="topbar-divider" />
-              <Avatar name={s.profile.name || "You"} small />
+              {s.settings.googlePicture ? (
+                <img className="account-photo" src={s.settings.googlePicture} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                <Avatar name={s.profile.name || "You"} small />
+              )}
             </div>
           </header>
           {error && (
@@ -538,21 +514,6 @@ export default function App() {
                 aria-label="Dismiss error"
               >
                 <X size={16} />
-              </button>
-            </div>
-          )}
-          {s.settings.demoMode && (
-            <div className="demo-strip">
-              <Sparkles size={13} />
-              <span>
-                Demo mode · Fictional contacts and simulated sends. Your changes
-                are saved locally.
-              </span>
-              <button onClick={() => setPresenter((v) => !v)}>
-                {presenter ? "Hide presenter" : "Presenter"} <Presentation size={12} />
-              </button>
-              <button onClick={() => setPage("settings")}>
-                Set up live integrations <ArrowUpRight size={12} />
               </button>
             </div>
           )}
@@ -1207,52 +1168,6 @@ export default function App() {
             </footer>
           </main>
         </div>
-        {presenter && s.settings.demoMode && (
-          <aside className="presenter-panel" aria-label="Presenter controls">
-            <div className="presenter-top">
-              <strong>
-                <Presentation size={15} /> Presenter
-              </strong>
-              <button
-                className="icon-button"
-                aria-label="Hide presenter controls"
-                onClick={() => setPresenter(false)}
-              >
-                <X size={14} />
-              </button>
-            </div>
-            <ol className="presenter-scenes">
-              {DEMO_SCENES.map((scene, i) => (
-                <li key={scene.id}>
-                  <button disabled={busy} onClick={() => void loadScene(scene.id)}>
-                    <span className="presenter-num">{i + 1}</span>
-                    <span>
-                      <strong>{scene.title}</strong>
-                      <small>{scene.shows}</small>
-                    </span>
-                    <kbd>Alt+{i + 1}</kbd>
-                  </button>
-                </li>
-              ))}
-            </ol>
-            <button
-              className="button outline compact full"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(SAMPLE_JOB_POSTING);
-                  setToast("Sample job posting copied. Paste it into Add a target.");
-                } catch {
-                  setToast("Could not copy. The posting is in docs/DEMO-SCRIPT.md.");
-                }
-              }}
-            >
-              <Copy size={14} /> Copy sample job posting
-            </button>
-            <p className="presenter-note">
-              Everyone here is fictional and nothing is really sent. Alt+0 hides this panel.
-            </p>
-          </aside>
-        )}
         {toast && (
           <div className="toast" role="status">
             <CheckCircle2 size={17} />
@@ -3104,6 +3019,63 @@ function ChatDetail({
   );
 }
 
+/** Google's "G" logo, drawn inline so sign-in works offline and without loading Google scripts. */
+function GoogleMark({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 48 48" aria-hidden="true" className="google-mark">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  );
+}
+
+/** First screen: sign in with Google so messages send from your Gmail and chats land on your Calendar. */
+function SignInScreen({ run, busy, error }: { run: Runner; busy: boolean; error: string | null }) {
+  const inExtension =
+    typeof chrome !== "undefined" && Boolean(chrome.runtime?.id && chrome.identity);
+  return (
+    <div className="signin-screen">
+      <div className="signin-card">
+        <img src="icon.svg" alt="" width={56} height={56} />
+        <h1>coffeechat</h1>
+        <p className="signin-lede">
+          Find people at the companies you're applying to, write the first
+          message, and keep track of every coffee chat.
+        </p>
+        <button
+          className="button signin-google"
+          disabled={busy || !inExtension}
+          onClick={() => void run({ type: "CONNECT_GOOGLE" })}
+        >
+          {busy ? <LoaderCircle size={18} className="spin" /> : <GoogleMark size={18} />}
+          {busy ? "Waiting for Google…" : "Sign in with Google"}
+        </button>
+        {error && <p className="inline-error" role="alert">{error}</p>}
+        {!inExtension && (
+          <p className="field-help">
+            Google sign-in works in the Chrome extension. Open coffeechat from
+            the extension's side panel to sign in.
+          </p>
+        )}
+        <ul className="signin-points">
+          <li><Mail size={15} /> Emails send from your own Gmail, only after you approve them.</li>
+          <li><CalendarDays size={15} /> Coffee chats go on your Google Calendar.</li>
+          <li><ShieldCheck size={15} /> Your contacts and notes stay on this computer.</li>
+        </ul>
+        <button
+          className="text-button muted"
+          disabled={busy}
+          onClick={() => void run({ type: "UPDATE_SETTINGS", settings: { signInSkipped: true } })}
+        >
+          Continue without Google
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /** Fill the profile from a PDF or Word résumé. The file is read here and never uploaded. */
 function ResumeImport({
   profile,
@@ -3343,35 +3315,38 @@ function SettingsPage({
           <section className="panel form-panel">
             <h2>Your connections</h2>
             <div className="integration-row">
-              <span className="integration-symbol gmail-symbol">M</span>
+              <span className="integration-symbol gmail-symbol">
+                <GoogleMark />
+              </span>
               <div>
-                <strong>Gmail & Google Calendar</strong>
+                <strong>Google account</strong>
                 <p>
                   {s.settings.googleConnected
-                    ? "Google connected"
-                    : "Connect your own Google account"}
+                    ? `Signed in${s.settings.googleEmail ? ` as ${s.settings.googleEmail}` : ""}. Gmail and Calendar are connected.`
+                    : "Sign in to send email from Gmail and add coffee chats to Google Calendar."}
                 </p>
               </div>
               {s.settings.googleConnected && (
                 <CheckCircle2 size={17} className="green-text" />
               )}
             </div>
-            <button
-              className="button outline full"
-              disabled={busy || s.settings.demoMode}
-              onClick={() =>
-                void run({ type: "CONNECT_GOOGLE" }, "Google connected")
-              }
-            >
-              {s.settings.googleConnected
-                ? "Reconnect Google"
-                : "Connect Google"}{" "}
-              <ArrowUpRight size={15} />
-            </button>
-            <p className="field-help">
-              Live connection requires a Chrome extension OAuth client. See the
-              setup guide in the repository.
-            </p>
+            {s.settings.googleConnected ? (
+              <button
+                className="button outline full"
+                disabled={busy}
+                onClick={() => void run({ type: "DISCONNECT_GOOGLE" })}
+              >
+                Sign out of Google
+              </button>
+            ) : (
+              <button
+                className="button primary full"
+                disabled={busy}
+                onClick={() => void run({ type: "CONNECT_GOOGLE" })}
+              >
+                <GoogleMark /> Sign in with Google
+              </button>
+            )}
             <hr />
             <div className="integration-row">
               <span className="integration-symbol ai-symbol">
@@ -3449,38 +3424,7 @@ function SettingsPage({
             )}
           </section>
           <section className="panel form-panel">
-            <div className="toggle-line">
-              <div>
-                <h2>Demo mode</h2>
-                <p>
-                  Fictional people. Simulated sends.
-                  <br />A faster follow-up clock.
-                </p>
-              </div>
-              <button
-                className={`toggle ${s.settings.demoMode ? "on" : ""}`}
-                role="switch"
-                aria-checked={s.settings.demoMode}
-                aria-label="Demo mode"
-                disabled={busy}
-                onClick={() =>
-                  void run(
-                    {
-                      type: "UPDATE_SETTINGS",
-                      settings: { demoMode: !s.settings.demoMode },
-                    },
-                    s.settings.demoMode
-                      ? "Live mode enabled. Configure integrations before sending."
-                      : "Demo mode enabled",
-                  )
-                }
-              >
-                <span />
-              </button>
-            </div>
-            <p className="field-help">
-              Demo and live data are kept separate.
-            </p>
+            <h2>Safety limits</h2>
             <div className="limits-line">
               <ShieldCheck size={16} />
               <span>
@@ -3490,17 +3434,6 @@ function SettingsPage({
                 {Math.round(s.settings.emailThreshold * 100)}%
               </span>
             </div>
-            {s.settings.demoMode && (
-              <button
-                className="text-button muted"
-                disabled={busy}
-                onClick={() =>
-                  void run({ type: "RESET_DEMO" }, "Demo data reset")
-                }
-              >
-                Reset demo data <RefreshCw size={13} />
-              </button>
-            )}
           </section>
           <section className="setup-help">
             <strong>Bring your own connections.</strong>

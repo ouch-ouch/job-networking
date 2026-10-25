@@ -15,7 +15,7 @@ import { getState, saveState, switchMode } from "./storage";
 import { createDemoState, demoXContacts } from "./mock";
 import { aiRequest } from "./ai";
 import { extractJobBasics } from "./jobText";
-import { connectGoogle } from "../google/auth";
+import { connectGoogle, disconnectGoogle } from "../google/auth";
 import { sendEmail, getThreadReplies } from "../google/gmail";
 import { createMeeting, updateMeetingDescription } from "../google/calendar";
 import { scrapeSearch, fillLinkedIn } from "../content/index";
@@ -37,6 +37,7 @@ const advancedStages = new Set(["scheduled", "met", "thanked"]);
 const defaultServices = {
   aiRequest,
   connectGoogle,
+  disconnectGoogle,
   sendEmail,
   getThreadReplies,
   createMeeting,
@@ -561,9 +562,11 @@ export async function applyAction(
       // A stored flag is never sufficient to establish a Google connection.
       if ("googleConnected" in action.settings)
         state.settings.googleConnected = input.settings.googleConnected;
-      message = state.settings.demoMode
-        ? "Demo mode active. All sends are simulated."
-        : "Live mode active. Add real contacts and connect Google to send.";
+      message = action.settings.signInSkipped
+        ? "You can sign in with Google any time from Settings."
+        : state.settings.demoMode
+          ? "Demo mode active. All sends are simulated."
+          : "Settings saved.";
       break;
     case "PARSE_JOB": {
       if (action.rawDescription.trim().length < 30)
@@ -1458,8 +1461,21 @@ export async function applyAction(
       } else {
         const account = await services.connectGoogle();
         state.settings.googleConnected = true;
-        message = `Google connected${account.email ? ` as ${account.email}` : ""}.`;
+        state.settings.googleEmail = account.email || undefined;
+        state.settings.googleName = account.name || undefined;
+        state.settings.googlePicture = account.picture || undefined;
+        if (!state.profile.name.trim() && account.name) state.profile.name = account.name;
+        message = `Signed in${account.email ? ` as ${account.email}` : ""}.`;
       }
+      break;
+    case "DISCONNECT_GOOGLE":
+      await services.disconnectGoogle();
+      state.settings.googleConnected = false;
+      state.settings.googleEmail = undefined;
+      state.settings.googleName = undefined;
+      state.settings.googlePicture = undefined;
+      state.settings.signInSkipped = false;
+      message = "Signed out of Google. Your contacts and drafts are still saved on this computer.";
       break;
     case "LOAD_DEMO_SCENE": {
       if (!state.settings.demoMode)

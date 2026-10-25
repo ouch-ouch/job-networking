@@ -128,6 +128,12 @@ export type Settings = {
   demoMode: boolean;
   backendUrl: string;
   googleConnected: boolean;
+  /** The signed-in Google account, shown in the header and Settings. */
+  googleEmail?: string;
+  googleName?: string;
+  googlePicture?: string;
+  /** Chose "Continue without Google" on the sign-in screen. */
+  signInSkipped?: boolean;
   emailThreshold: number;
   dailyEmailLimit: number;
   dailyScrapeLimit: number;
@@ -214,6 +220,7 @@ export type Action =
     }
   | { type: "RUN_SCHEDULER"; now?: number }
   | { type: "CONNECT_GOOGLE" }
+  | { type: "DISCONNECT_GOOGLE" }
   | { type: "RESET_DEMO" }
   | { type: "LOAD_DEMO_SCENE"; scene: DemoSceneId };
 export type ActionResult = {

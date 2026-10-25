@@ -53,10 +53,9 @@ async function writeStates(
 
 export async function getState(): Promise<AppState> {
   const existing = await readState(STORAGE_KEY);
-  if (existing) return existing;
-  const initial = createDemoState();
-  await saveState(initial);
-  return clone(initial);
+  if (existing && !existing.settings.demoMode) return existing;
+  // Demo mode is retired: open your saved live workspace, or start an empty one.
+  return existing ? switchMode(existing, false) : startLive();
 }
 
 /** Keep the active key for subscribers and an independent backup for this mode. */
@@ -65,6 +64,12 @@ export async function saveState(state: AppState): Promise<void> {
     [modeStorageKey(state.settings.demoMode)]: state,
     [STORAGE_KEY]: state,
   });
+}
+
+async function startLive(): Promise<AppState> {
+  const initial = createLiveState(createDemoState());
+  await saveState(initial);
+  return clone(initial);
 }
 
 export function createLiveState(source: AppState): AppState {

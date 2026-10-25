@@ -96,10 +96,35 @@ export async function googleRequest<T>(
   return (await response.json()) as T;
 }
 
-export async function connectGoogle(): Promise<{ email: string }> {
+export type GoogleAccount = { email: string; name?: string; picture?: string };
+
+/** Sign in: opens Google's consent screen, then reads the account's name, email, and photo. */
+export async function connectGoogle(): Promise<GoogleAccount> {
   await getGoogleToken(true);
-  const profile = await googleRequest<{ emailAddress: string }>(
-    `${gmailBase}/profile`,
+  const user = await googleRequest<{ email?: string; name?: string; picture?: string }>(
+    "https://www.googleapis.com/oauth2/v2/userinfo",
   );
-  return { email: profile.emailAddress };
+  const email =
+    user.email ||
+    (await googleRequest<{ emailAddress: string }>(`${gmailBase}/profile`)).emailAddress;
+  return { email, name: user.name, picture: user.picture };
+}
+
+/** Sign out: forget the cached token so the next sign-in asks Google again. */
+export async function disconnectGoogle(): Promise<void> {
+  if (typeof chrome === "undefined" || !chrome.identity) return;
+  const token = await new Promise<string | undefined>((resolve) =>
+    chrome.identity.getAuthToken({ interactive: false }, (t) => {
+      void chrome.runtime.lastError;
+      resolve(t);
+    }),
+  );
+  if (token) {
+    await chrome.identity.removeCachedAuthToken({ token });
+    // Revoke so Google shows the account picker next time.
+    await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, {
+      method: "POST",
+    }).catch(() => undefined);
+  }
+  await chrome.identity.clearAllCachedAuthTokens?.();
 }
