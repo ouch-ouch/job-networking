@@ -12,7 +12,7 @@ export type JobBasics = {
 
 const ROLE_WORDS =
   "Engineer|Developer|Scientist|Analyst|Designer|Manager|Intern|Internship|Associate|Consultant|Researcher|Specialist|Coordinator|Architect|Lead|Director|Representative|Recruiter|Accountant|Administrator|Technician|Writer|Strategist|Programmer|Officer|Fellow|Assistant|Producer|Editor|Marketer|Advocate|Partner|Owner";
-const ROLE_RE = new RegExp(`\\b(${ROLE_WORDS})s?\\b`, "i");
+export const ROLE_RE = new RegExp(`\\b(${ROLE_WORDS})s?\\b`, "i");
 
 // Words that look like names but aren't companies.
 const NOT_COMPANY = new Set(
@@ -28,7 +28,7 @@ const NOT_COMPANY = new Set(
   ).split(" "),
 );
 
-const SKILLS = [
+export const SKILLS = [
   "TypeScript", "JavaScript", "Python", "Java", "Go", "Rust", "C++", "C#", "Ruby", "Kotlin", "Swift", "Scala",
   "SQL", "PostgreSQL", "MySQL", "MongoDB", "Redis", "GraphQL", "REST", "APIs", "React", "Next.js", "Vue",
   "Angular", "Node.js", "Django", "Flask", "Spring", "AWS", "GCP", "Azure", "Docker", "Kubernetes", "Terraform",
@@ -48,7 +48,7 @@ const titleCase = (slug: string) =>
     .join(" ");
 
 /** A plausible company name: 1-4 capitalized-ish words, not a generic word. */
-function plausibleCompany(value: string | undefined): string | undefined {
+export function plausibleCompany(value: string | undefined): string | undefined {
   if (!value) return undefined;
   const name = clean(value).replace(/\s*\((?:remote|hybrid|on-?site)\)$/i, "");
   if (!name || name.length > 50 || /^\d/.test(name)) return undefined;

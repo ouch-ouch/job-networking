@@ -42,6 +42,7 @@ import {
   Sparkles,
   Target as TargetIcon,
   Trash2,
+  Upload,
   UsersRound,
   WandSparkles,
   X,
@@ -64,6 +65,8 @@ import type {
 import { useStore } from "../shared/useStore";
 import { DEMO_SCENES, SAMPLE_JOB_POSTING } from "../shared/demoScenes";
 import { TemplateEditor, TemplatePreview } from "./TemplateEditor";
+import { readResumeFile } from "./resumeFile";
+import { extractResumeBasics, resumeKeywords } from "../shared/resume";
 import {
   buildLinkedInSearchQuery,
   buildLinkedInSearchUrl,
@@ -442,7 +445,7 @@ export default function App() {
               <Coffee size={23} strokeWidth={1.7} />
             </span>
             <span>
-              coffeechat<span className="brand-period">.</span>
+              coffeechat
               <small>YOUR NETWORKING COPILOT</small>
             </span>
           </a>
@@ -1448,6 +1451,29 @@ function PeopleSearchDialog({
               );
             })}
           </div>
+          {target && (state.profile.keywords?.length ?? 0) > 0 && (
+            <div className="resume-searches">
+              <small>From your résumé</small>
+              <div className="keyword-chips">
+                {state.profile.keywords!.slice(0, 8).map((k) => {
+                  const query = `${buildLinkedInSearchQuery(target, state.profile)} ${k.includes(" ") ? `"${k}"` : k}`;
+                  return (
+                    <a
+                      key={k}
+                      className="keyword-chip link"
+                      href={buildLinkedInSearchUrl(target, state.profile, { keywords: query })}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={() => setKeywords(query)}
+                      title={`Search LinkedIn for ${query}`}
+                    >
+                      + {k}
+                    </a>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <p className="field-help">
             LinkedIn opens in a new tab. Review the results, then come back here
             and press Import LinkedIn results to add up to 20 people.
@@ -3078,6 +3104,137 @@ function ChatDetail({
   );
 }
 
+/** Fill the profile from a PDF or Word résumé. The file is read here and never uploaded. */
+function ResumeImport({
+  profile,
+  onChange,
+}: {
+  profile: Profile;
+  onChange: (update: (p: Profile) => Profile) => void;
+}) {
+  const [reading, setReading] = useState(false);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const [summary, setSummary] = useState("");
+  const [newKeyword, setNewKeyword] = useState("");
+  const keywords = profile.keywords || [];
+  const setKeywords = (next: string[]) => onChange((p) => ({ ...p, keywords: next }));
+
+  async function onFile(file: File) {
+    setReading(true);
+    setError("");
+    setNote("");
+    try {
+      const basics = extractResumeBasics(await readResumeFile(file));
+      const filled: string[] = [];
+      onChange((p) => {
+        const next = { ...p };
+        for (const [key, label] of [
+          ["name", "name"],
+          ["school", "school"],
+          ["major", "major"],
+          ["year", "year"],
+          ["background", "about you"],
+        ] as const) {
+          if (!next[key].trim() && basics[key]) {
+            next[key] = basics[key];
+            filled.push(label);
+          }
+        }
+        const found = resumeKeywords(basics);
+        const merged = [...(p.keywords || [])];
+        for (const k of found) if (!merged.some((m) => m.toLowerCase() === k.toLowerCase())) merged.push(k);
+        next.keywords = merged.slice(0, 25);
+        return next;
+      });
+      const count = resumeKeywords(basics).length;
+      if (!count && !basics.school && !basics.name)
+        throw new Error("Couldn't find any text in that file. If it's a scanned image, try exporting it as a text PDF.");
+      setSummary(basics.background);
+      setNote(
+        `Found ${count} keyword${count === 1 ? "" : "s"}` +
+          (filled.length ? ` and filled in your ${filled.join(", ")}` : "") +
+          ". Check everything, then press Save profile.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't read that file.");
+    } finally {
+      setReading(false);
+    }
+  }
+
+  return (
+    <div className="resume-import">
+      <label className={`resume-drop${reading ? " busy" : ""}`}>
+        <input
+          type="file"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          disabled={reading}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) void onFile(file);
+          }}
+        />
+        {reading ? <LoaderCircle size={18} className="spin" /> : <Upload size={18} />}
+        <span>
+          <strong>{reading ? "Reading your résumé…" : "Fill from your résumé"}</strong>
+          <small>PDF or Word. Read on your computer, never uploaded.</small>
+        </span>
+      </label>
+      {error && <p className="inline-error" role="alert">{error}</p>}
+      {note && <p className="import-feedback" role="status">{note}</p>}
+      {summary && summary !== profile.background && (
+        <div className="resume-summary">
+          <p>{summary}</p>
+          <button
+            type="button"
+            className="button outline compact"
+            onClick={() => onChange((p) => ({ ...p, background: summary }))}
+          >
+            Use this for “A bit about you”
+          </button>
+        </div>
+      )}
+      {(keywords.length > 0 || note) && (
+        <div className="field">
+          Search keywords from your résumé
+          <div className="keyword-chips">
+            {keywords.map((k) => (
+              <span className="keyword-chip" key={k}>
+                {k}
+                <button
+                  type="button"
+                  aria-label={`Remove ${k}`}
+                  onClick={() => setKeywords(keywords.filter((x) => x !== k))}
+                >
+                  <X size={12} />
+                </button>
+              </span>
+            ))}
+            <input
+              className="keyword-add"
+              value={newKeyword}
+              placeholder="Add a keyword"
+              onChange={(e) => setNewKeyword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                const k = newKeyword.trim();
+                if (k && !keywords.some((x) => x.toLowerCase() === k.toLowerCase())) setKeywords([...keywords, k]);
+                setNewKeyword("");
+              }}
+            />
+          </div>
+          <small className="field-help">
+            These show up as extra LinkedIn searches, like “Company + Python”.
+          </small>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsPage({
   state: s,
   run,
@@ -3117,6 +3274,7 @@ function SettingsPage({
           }}
         >
           <h2>Your profile</h2>
+          <ResumeImport profile={profile} onChange={setProfile} />
           <div className="form-grid">
             <label className="field">
               Your name

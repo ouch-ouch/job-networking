@@ -184,9 +184,6 @@ p {
   letter-spacing: -1px;
   line-height: 1;
 }
-.brand-period {
-  color: #657455;
-}
 .brand small {
   display: block;
   font-family: "DM Sans Variable", sans-serif;
@@ -4905,4 +4902,112 @@ hr {
   font-size: 12px;
   font-weight: 400;
   opacity: 0.85;
+}
+
+/* Résumé import in Settings, and résumé keyword searches. */
+.resume-import {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.resume-drop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1.5px dashed var(--green);
+  border-radius: 10px;
+  background: var(--sage);
+  color: var(--green-dark);
+  cursor: pointer;
+}
+.resume-drop:hover {
+  background: #e4ebdf;
+}
+.resume-drop.busy {
+  cursor: progress;
+}
+.resume-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+.resume-drop span {
+  display: grid;
+  gap: 2px;
+}
+.resume-drop small {
+  color: #3f4a42;
+  font-size: 12px;
+}
+.resume-summary {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.resume-summary p {
+  margin: 0;
+  font-size: 13px;
+  color: #24322a;
+}
+.keyword-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 6px;
+}
+.keyword-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid #cfd8c9;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d2a22;
+  font-size: 12px;
+  font-weight: 500;
+}
+.keyword-chip button {
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #4a554c;
+  cursor: pointer;
+}
+.keyword-chip button:hover {
+  background: var(--sage);
+}
+.keyword-chip.link {
+  padding: 4px 10px;
+  text-decoration: none;
+  color: var(--green-dark);
+  border-color: var(--green);
+}
+.keyword-chip.link:hover {
+  background: var(--green-dark);
+  color: #fff;
+}
+.keyword-add {
+  min-width: 110px;
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px dashed #cfd8c9;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 12px;
+}
+.resume-searches small {
+  color: #3f4a42;
+  font-size: 12px;
+  font-weight: 600;
 }

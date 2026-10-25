@@ -18,6 +18,8 @@ export type Profile = {
   background: string;
   availability: string;
   signature: string;
+  /** Skills, past companies, and clubs read from your résumé, used as search keywords. */
+  keywords?: string[];
 };
 export type Template = {
   id: string;
